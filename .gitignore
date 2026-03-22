@@ -25,3 +25,12 @@ Thumbs.db
 .idea/
 *.swp
 *.swo
+
+# Next.js & Frontend
+frontend/.next/
+frontend/out/
+frontend/.vercel/
+.v0-trash/
+.snowflake/
+__v0_*
+next.user-config.*
