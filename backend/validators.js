@@ -4,23 +4,71 @@ const validators = {
   // PRUEBAS
   validatePrueba: (data) => {
     const errors = [];
-    
+
     if (!data.producto || typeof data.producto !== 'string' || data.producto.trim().length === 0) {
       errors.push('Campo "producto" es obligatorio y debe ser texto');
     } else if (data.producto.length > 100) {
       errors.push('Campo "producto" no puede exceder 100 caracteres');
     }
-    
+
     if (!data.modulo_evaluado || typeof data.modulo_evaluado !== 'string' || data.modulo_evaluado.trim().length === 0) {
       errors.push('Campo "modulo_evaluado" es obligatorio y debe ser texto');
     } else if (data.modulo_evaluado.length > 100) {
       errors.push('Campo "modulo_evaluado" no puede exceder 100 caracteres');
     }
-    
+
     if (!data.objetivo || typeof data.objetivo !== 'string' || data.objetivo.trim().length === 0) {
       errors.push('Campo "objetivo" es obligatorio y debe ser texto');
     }
-    
+
+    if (data.perfil_usuarios !== undefined && data.perfil_usuarios !== null) {
+      if (typeof data.perfil_usuarios !== 'string') {
+        errors.push('Campo "perfil_usuarios" debe ser texto');
+      } else if (data.perfil_usuarios.length > 255) {
+        errors.push('Campo "perfil_usuarios" no puede exceder 255 caracteres');
+      }
+    }
+
+    if (data.metodo !== undefined && data.metodo !== null) {
+      if (typeof data.metodo !== 'string') {
+        errors.push('Campo "metodo" debe ser texto');
+      } else if (data.metodo.length > 100) {
+        errors.push('Campo "metodo" no puede exceder 100 caracteres');
+      }
+    }
+
+    if (data.fecha !== undefined && data.fecha !== null) {
+      if (typeof data.fecha !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(data.fecha)) {
+        errors.push('Campo "fecha" debe tener formato YYYY-MM-DD');
+      }
+    }
+
+    if (data.lugar !== undefined && data.lugar !== null) {
+      if (typeof data.lugar !== 'string') {
+        errors.push('Campo "lugar" debe ser texto');
+      } else if (data.lugar.length > 100) {
+        errors.push('Campo "lugar" no puede exceder 100 caracteres');
+      }
+    }
+
+    if (data.duracion_minutos !== undefined && data.duracion_minutos !== null) {
+      if (typeof data.duracion_minutos !== 'number' || data.duracion_minutos < 0) {
+        errors.push('Campo "duracion_minutos" debe ser un número no negativo');
+      }
+    }
+
+    if (data.instrucciones_inicio !== undefined && data.instrucciones_inicio !== null && typeof data.instrucciones_inicio !== 'string') {
+      errors.push('Campo "instrucciones_inicio" debe ser texto');
+    }
+
+    if (data.preguntas_seguimiento !== undefined && data.preguntas_seguimiento !== null && typeof data.preguntas_seguimiento !== 'string') {
+      errors.push('Campo "preguntas_seguimiento" debe ser texto');
+    }
+
+    if (data.instrucciones_cierre !== undefined && data.instrucciones_cierre !== null && typeof data.instrucciones_cierre !== 'string') {
+      errors.push('Campo "instrucciones_cierre" debe ser texto');
+    }
+
     return errors.length > 0 ? { valid: false, errors } : { valid: true };
   },
 
