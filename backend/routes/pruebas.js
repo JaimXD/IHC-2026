@@ -1,13 +1,19 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../config/db');
+const validators = require('../validators');
 
 router.post('/', (req, res) => {
+  const validation = validators.validatePrueba(req.body);
+  if (!validation.valid) {
+    return res.status(400).json({ error: 'Validación fallida', detalles: validation.errors });
+  }
+
   const { producto, modulo_evaluado, objetivo } = req.body;
   const sql = 'INSERT INTO pruebas_usabilidad (producto, modulo_evaluado, objetivo) VALUES (?, ?, ?)';
   db.query(sql, [producto, modulo_evaluado, objetivo], (err, result) => {
     if (err) return res.status(500).json({ error: err.message });
-    res.status(201).json({ id: result.insertId, mensaje: 'Guardado' });
+    res.status(201).json({ id: result.insertId, mensaje: 'Prueba guardada exitosamente' });
   });
 });
 
@@ -28,6 +34,11 @@ router.get('/:id', (req, res) => {
 });
 
 router.put('/:id', (req, res) => {
+  const validation = validators.validatePrueba(req.body);
+  if (!validation.valid) {
+    return res.status(400).json({ error: 'Validación fallida', detalles: validation.errors });
+  }
+
   const { id } = req.params;
   const { producto, modulo_evaluado, objetivo } = req.body;
   const sql = 'UPDATE pruebas_usabilidad SET producto = ?, modulo_evaluado = ?, objetivo = ? WHERE id = ?';

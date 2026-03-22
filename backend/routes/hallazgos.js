@@ -1,14 +1,20 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../config/db');
+const validators = require('../validators');
 
 router.post('/', (req, res) => {
+  const validation = validators.validateHallazgo(req.body);
+  if (!validation.valid) {
+    return res.status(400).json({ error: 'Validación fallida', detalles: validation.errors });
+  }
+
   const { prueba_id, frecuencia, severidad, prioridad, estado, recomendacion_mejora } = req.body;
   const sql = 'INSERT INTO hallazgos (prueba_id, frecuencia, severidad, prioridad, estado, recomendacion_mejora) VALUES (?, ?, ?, ?, ?, ?)';
   
   db.query(sql, [prueba_id, frecuencia, severidad, prioridad, estado, recomendacion_mejora], (err, result) => {
     if (err) return res.status(500).json({ error: err.message });
-    res.status(201).json({ id: result.insertId, mensaje: 'Hallazgo guardado' });
+    res.status(201).json({ id: result.insertId, mensaje: 'Hallazgo guardado exitosamente' });
   });
 });
 
@@ -29,6 +35,11 @@ router.get('/:id', (req, res) => {
 });
 
 router.put('/:id', (req, res) => {
+  const validation = validators.validateHallazgo(req.body);
+  if (!validation.valid) {
+    return res.status(400).json({ error: 'Validación fallida', detalles: validation.errors });
+  }
+
   const { id } = req.params;
   const { prueba_id, frecuencia, severidad, prioridad, estado, recomendacion_mejora } = req.body;
   const sql = 'UPDATE hallazgos SET prueba_id = ?, frecuencia = ?, severidad = ?, prioridad = ?, estado = ?, recomendacion_mejora = ? WHERE id = ?';

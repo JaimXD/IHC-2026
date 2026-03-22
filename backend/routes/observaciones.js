@@ -1,15 +1,21 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../config/db');
+const validators = require('../validators');
 
 // Crear una observación (POST)
 router.post('/', (req, res) => {
+  const validation = validators.validateObservacion(req.body);
+  if (!validation.valid) {
+    return res.status(400).json({ error: 'Validación fallida', detalles: validation.errors });
+  }
+
   const { participante_id, tarea_id, exito, tiempo_segundos, cantidad_errores, comentarios, problema_detectado, severidad, mejora_propuesta } = req.body;
   const sql = 'INSERT INTO observaciones (participante_id, tarea_id, exito, tiempo_segundos, cantidad_errores, comentarios, problema_detectado, severidad, mejora_propuesta) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)';
   
   db.query(sql, [participante_id, tarea_id, exito, tiempo_segundos, cantidad_errores, comentarios, problema_detectado, severidad, mejora_propuesta], (err, result) => {
     if (err) return res.status(500).json({ error: err.message });
-    res.status(201).json({ id: result.insertId, mensaje: 'Observación guardada' });
+    res.status(201).json({ id: result.insertId, mensaje: 'Observación guardada exitosamente' });
   });
 });
 
@@ -31,6 +37,11 @@ router.get('/:id', (req, res) => {
 });
 
 router.put('/:id', (req, res) => {
+  const validation = validators.validateObservacion(req.body);
+  if (!validation.valid) {
+    return res.status(400).json({ error: 'Validación fallida', detalles: validation.errors });
+  }
+
   const { id } = req.params;
   const { participante_id, tarea_id, exito, tiempo_segundos, cantidad_errores, comentarios, problema_detectado, severidad, mejora_propuesta } = req.body;
   const sql = 'UPDATE observaciones SET participante_id = ?, tarea_id = ?, exito = ?, tiempo_segundos = ?, cantidad_errores = ?, comentarios = ?, problema_detectado = ?, severidad = ?, mejora_propuesta = ? WHERE id = ?';

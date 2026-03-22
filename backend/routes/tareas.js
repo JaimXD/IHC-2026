@@ -1,15 +1,21 @@
 const express = require('express');
 const router = express.Router();
-const db = require('../config/db'); 
+const db = require('../config/db');
+const validators = require('../validators');
 
 // Crear una nueva tarea (POST)
 router.post('/', (req, res) => {
+  const validation = validators.validateTarea(req.body);
+  if (!validation.valid) {
+    return res.status(400).json({ error: 'Validación fallida', detalles: validation.errors });
+  }
+
   const { prueba_id, escenario, resultado_esperado, metrica_principal, criterio_exito } = req.body;
   const sql = 'INSERT INTO tareas (prueba_id, escenario, resultado_esperado, metrica_principal, criterio_exito) VALUES (?, ?, ?, ?, ?)';
   
   db.query(sql, [prueba_id, escenario, resultado_esperado, metrica_principal, criterio_exito], (err, result) => {
     if (err) return res.status(500).json({ error: err.message });
-    res.status(201).json({ id: result.insertId, mensaje: 'Tarea guardada' });
+    res.status(201).json({ id: result.insertId, mensaje: 'Tarea guardada exitosamente' });
   });
 });
 
@@ -31,6 +37,11 @@ router.get('/:id', (req, res) => {
 });
 
 router.put('/:id', (req, res) => {
+  const validation = validators.validateTarea(req.body);
+  if (!validation.valid) {
+    return res.status(400).json({ error: 'Validación fallida', detalles: validation.errors });
+  }
+
   const { id } = req.params;
   const { prueba_id, escenario, resultado_esperado, metrica_principal, criterio_exito } = req.body;
   const sql = 'UPDATE tareas SET prueba_id = ?, escenario = ?, resultado_esperado = ?, metrica_principal = ?, criterio_exito = ? WHERE id = ?';
