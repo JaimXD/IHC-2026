@@ -2,42 +2,53 @@ const express = require('express');
 const router = express.Router();
 const db = require('../config/db');
 const validators = require('../validators');
+const asyncHandler = require('../utils/asyncHandler');
 
-router.post('/', (req, res) => {
+router.post('/', asyncHandler((req, res, next) => {
   const validation = validators.validateHallazgo(req.body);
   if (!validation.valid) {
-    return res.status(400).json({ error: 'Validación fallida', detalles: validation.errors });
+    const error = new Error('Validación fallida');
+    error.statusCode = 400;
+    error.detalles = validation.errors;
+    throw error;
   }
 
   const { prueba_id, frecuencia, severidad, prioridad, estado, recomendacion_mejora } = req.body;
   const sql = 'INSERT INTO hallazgos (prueba_id, frecuencia, severidad, prioridad, estado, recomendacion_mejora) VALUES (?, ?, ?, ?, ?, ?)';
   
   db.query(sql, [prueba_id, frecuencia, severidad, prioridad, estado, recomendacion_mejora], (err, result) => {
-    if (err) return res.status(500).json({ error: err.message });
+    if (err) return next(err);
     res.status(201).json({ id: result.insertId, mensaje: 'Hallazgo guardado exitosamente' });
   });
-});
+}));
 
-router.get('/', (req, res) => {
+router.get('/', asyncHandler((req, res, next) => {
   db.query('SELECT * FROM hallazgos', (err, results) => {
-    if (err) return res.status(500).json({ error: err.message });
+    if (err) return next(err);
     res.json(results);
   });
-});
+}));
 
-router.get('/:id', (req, res) => {
+router.get('/:id', asyncHandler((req, res, next) => {
   const { id } = req.params;
   db.query('SELECT * FROM hallazgos WHERE id = ?', [id], (err, results) => {
-    if (err) return res.status(500).json({ error: err.message });
-    if (results.length === 0) return res.status(404).json({ error: 'Hallazgo no encontrado' });
+    if (err) return next(err);
+    if (results.length === 0) {
+      const error = new Error('Hallazgo no encontrado');
+      error.statusCode = 404;
+      return next(error);
+    }
     res.json(results[0]);
   });
-});
+}));
 
-router.put('/:id', (req, res) => {
+router.put('/:id', asyncHandler((req, res, next) => {
   const validation = validators.validateHallazgo(req.body);
   if (!validation.valid) {
-    return res.status(400).json({ error: 'Validación fallida', detalles: validation.errors });
+    const error = new Error('Validación fallida');
+    error.statusCode = 400;
+    error.detalles = validation.errors;
+    throw error;
   }
 
   const { id } = req.params;
@@ -45,19 +56,27 @@ router.put('/:id', (req, res) => {
   const sql = 'UPDATE hallazgos SET prueba_id = ?, frecuencia = ?, severidad = ?, prioridad = ?, estado = ?, recomendacion_mejora = ? WHERE id = ?';
 
   db.query(sql, [prueba_id, frecuencia, severidad, prioridad, estado, recomendacion_mejora, id], (err, result) => {
-    if (err) return res.status(500).json({ error: err.message });
-    if (result.affectedRows === 0) return res.status(404).json({ error: 'Hallazgo no encontrado' });
+    if (err) return next(err);
+    if (result.affectedRows === 0) {
+      const error = new Error('Hallazgo no encontrado');
+      error.statusCode = 404;
+      return next(error);
+    }
     res.json({ mensaje: 'Hallazgo actualizado exitosamente' });
   });
-});
+}));
 
-router.delete('/:id', (req, res) => {
+router.delete('/:id', asyncHandler((req, res, next) => {
   const { id } = req.params;
   db.query('DELETE FROM hallazgos WHERE id = ?', [id], (err, result) => {
-    if (err) return res.status(500).json({ error: err.message });
-    if (result.affectedRows === 0) return res.status(404).json({ error: 'Hallazgo no encontrado' });
+    if (err) return next(err);
+    if (result.affectedRows === 0) {
+      const error = new Error('Hallazgo no encontrado');
+      error.statusCode = 404;
+      return next(error);
+    }
     res.json({ mensaje: 'Hallazgo eliminado exitosamente' });
   });
-});
+}));
 
 module.exports = router;
