@@ -3,10 +3,14 @@ const cors = require('cors');
 require('dotenv').config();
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 const logger = require('./utils/logger');
+const initializeDatabase = require('./initDb');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// Inicializar base de datos
+initializeDatabase();
 
 // Importar rutas
 const pruebasRoutes = require('./routes/pruebas');
@@ -28,7 +32,7 @@ app.use(notFoundHandler);
 // Middleware de manejo de errores (debe ser el ÚLTIMO)
 app.use(errorHandler);
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
   logger.info(`Servidor iniciado en http://localhost:${PORT}`);
 });
