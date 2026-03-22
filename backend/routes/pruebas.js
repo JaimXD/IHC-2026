@@ -1,8 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const db = require('../config/db'); 
+const db = require('../config/db');
 
-// Ya no necesitas poner '/api/pruebas', solo '/'
 router.post('/', (req, res) => {
   const { producto, modulo_evaluado, objetivo } = req.body;
   const sql = 'INSERT INTO pruebas_usabilidad (producto, modulo_evaluado, objetivo) VALUES (?, ?, ?)';
