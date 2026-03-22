@@ -21,4 +21,34 @@ router.get('/', (req, res) => {
   });
 });
 
+router.get('/:id', (req, res) => {
+  const { id } = req.params;
+  db.query('SELECT * FROM observaciones WHERE id = ?', [id], (err, results) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (results.length === 0) return res.status(404).json({ error: 'Observacion no encontrada' });
+    res.json(results[0]);
+  });
+});
+
+router.put('/:id', (req, res) => {
+  const { id } = req.params;
+  const { participante_id, tarea_id, exito, tiempo_segundos, cantidad_errores, comentarios, problema_detectado, severidad, mejora_propuesta } = req.body;
+  const sql = 'UPDATE observaciones SET participante_id = ?, tarea_id = ?, exito = ?, tiempo_segundos = ?, cantidad_errores = ?, comentarios = ?, problema_detectado = ?, severidad = ?, mejora_propuesta = ? WHERE id = ?';
+
+  db.query(sql, [participante_id, tarea_id, exito, tiempo_segundos, cantidad_errores, comentarios, problema_detectado, severidad, mejora_propuesta, id], (err, result) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (result.affectedRows === 0) return res.status(404).json({ error: 'Observacion no encontrada' });
+    res.json({ mensaje: 'Observacion actualizada exitosamente' });
+  });
+});
+
+router.delete('/:id', (req, res) => {
+  const { id } = req.params;
+  db.query('DELETE FROM observaciones WHERE id = ?', [id], (err, result) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (result.affectedRows === 0) return res.status(404).json({ error: 'Observacion no encontrada' });
+    res.json({ mensaje: 'Observacion eliminada exitosamente' });
+  });
+});
+
 module.exports = router;
