@@ -10,7 +10,7 @@ app.use(cors());
 app.use(express.json());
 
 // Inicializar base de datos
-initializeDatabase();
+// initializeDatabase();
 
 // Importar rutas
 const pruebasRoutes = require('./routes/pruebas');
