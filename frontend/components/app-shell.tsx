@@ -11,7 +11,7 @@ import {
   FileSearch,
   Menu,
   X,
-  FlaskConical,
+  Target,
   Users,
   ChevronRight,
 } from "lucide-react"
@@ -62,11 +62,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   return (
-    <div className="min-h-screen flex bg-background">
+    <div className="min-h-dvh flex bg-background bg-[radial-gradient(circle_at_20%_0%,rgba(24,119,242,0.08),transparent_45%),radial-gradient(circle_at_80%_100%,rgba(8,145,178,0.08),transparent_40%)]">
       {/* Sidebar overlay for mobile */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 z-30 bg-foreground/40 backdrop-blur-sm md:hidden"
+          className="fixed inset-0 z-30 bg-slate-950/55 backdrop-blur-sm md:hidden"
           onClick={() => setSidebarOpen(false)}
           aria-hidden="true"
         />
@@ -78,18 +78,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         role="navigation"
         aria-label="Navegación principal"
         className={cn(
-          "fixed top-0 left-0 z-40 h-full w-72 bg-sidebar text-sidebar-foreground flex flex-col transition-transform duration-300 ease-in-out md:static md:translate-x-0 shadow-xl md:shadow-none",
+          "fixed inset-y-0 left-0 z-40 h-dvh min-h-dvh w-full max-w-full bg-sidebar text-sidebar-foreground flex flex-col transition-transform duration-300 ease-in-out shadow-2xl md:sticky md:top-0 md:w-72 md:max-w-[18rem] md:translate-x-0 md:shadow-none",
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
+        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(170deg,rgba(17,97,206,0.22)_0%,rgba(4,30,62,0)_42%)]" aria-hidden="true" />
+
         {/* Sidebar header - Logo area */}
-        <div className="flex items-center gap-3 px-6 py-6 border-b border-sidebar-border/50">
+        <div className="relative flex items-center gap-3 px-6 py-6 border-b border-sidebar-border/45">
           <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-br from-sidebar-primary to-sidebar-primary/70 shadow-lg shadow-sidebar-primary/25">
-            <FlaskConical className="w-5 h-5 text-sidebar-primary-foreground" aria-hidden="true" />
+            <Target className="w-5 h-5 text-sidebar-primary-foreground" aria-hidden="true" />
           </div>
           <div className="flex-1">
-            <p className="text-base font-bold leading-tight text-sidebar-foreground tracking-tight">UX Testing</p>
-            <p className="text-xs text-sidebar-foreground/50 leading-tight">Research Platform</p>
+            <p className="text-base font-bold leading-tight text-sidebar-foreground tracking-tight">U-Test</p>
+            <p className="text-xs text-sidebar-foreground/50 leading-tight">Usability Testing</p>
           </div>
           <button
             className="md:hidden text-sidebar-foreground/70 hover:text-sidebar-foreground focus:outline-none focus:ring-2 focus:ring-sidebar-ring rounded-lg p-1.5 hover:bg-sidebar-accent transition-colors"
@@ -101,14 +103,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
 
         {/* Nav section label */}
-        <div className="px-6 pt-6 pb-2">
+        <div className="relative px-6 pt-6 pb-2">
           <p className="text-[10px] font-semibold uppercase tracking-widest text-sidebar-foreground/40">
             Navegación
           </p>
         </div>
 
         {/* Nav links */}
-        <nav className="flex-1 px-4 space-y-1 overflow-y-auto" aria-label="Secciones">
+        <nav className="relative flex-1 px-4 space-y-1.5 overflow-y-auto pb-5" aria-label="Secciones">
           {navItems.map((item) => {
             const isActive = pathname === item.href
             const Icon = item.icon
@@ -164,7 +166,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </nav>
 
         {/* Sidebar footer */}
-        <div className="px-6 py-5 border-t border-sidebar-border/50">
+        <div className="relative px-6 py-5 border-t border-sidebar-border/45 bg-sidebar/70 backdrop-blur-sm">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-full bg-sidebar-accent flex items-center justify-center">
               <span className="text-xs font-semibold text-sidebar-accent-foreground">UX</span>
@@ -178,13 +180,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* Main content */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 bg-background/65 md:backdrop-blur-[1px]">
         {/* Top bar */}
-        <header className="sticky top-0 z-20 flex items-center gap-4 px-4 md:px-6 py-3 bg-card/80 backdrop-blur-md border-b border-border h-16">
+        <header className="sticky top-0 z-20 flex items-center gap-4 px-4 md:px-6 py-3 bg-card/80 backdrop-blur-md border-b border-border/80 h-16">
           <Button
             variant="ghost"
             size="icon"
-            className="md:hidden"
+            className="md:hidden border border-border/70 bg-background/70"
             onClick={() => setSidebarOpen(true)}
             aria-controls="sidebar"
             aria-expanded={sidebarOpen}
