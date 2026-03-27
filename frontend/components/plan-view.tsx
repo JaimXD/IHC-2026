@@ -1,10 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Plus, Pencil, Trash2, Save, X, Search, Eye, MoreVertical } from 'lucide-react'
+import { Plus, Pencil, Trash2, Save, X, Search, Eye, MoreVertical, Filter, ChevronDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ToastContainer } from '@/components/toast-container'
 import { useToasts } from '@/hooks/use-toasts'
@@ -73,6 +73,19 @@ const EMPTY_FORM: PlanFormValues = {
   preguntasSeguimiento: '',
   instruccionesCierre: '',
 }
+
+type DateFilter = 'all' | 'upcoming' | 'past' | 'thisMonth'
+type DurationFilter = 'all' | 'short' | 'medium' | 'long'
+type SortFilter = 'recent' | 'oldest' | 'az'
+
+const normalizeText = (value: string) =>
+  value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+
+const isValidDate = (value: string) => !Number.isNaN(new Date(value).getTime())
 
 function DetailModal({ plan, isOpen, onClose }: { plan: Plan | null; isOpen: boolean; onClose: () => void }) {
   if (!isOpen || !plan) return null
@@ -147,6 +160,15 @@ export function PlanView() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<Plan | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
+  const [filterOpen, setFilterOpen] = useState(false)
+  const [appliedMethod, setAppliedMethod] = useState('all')
+  const [appliedDate, setAppliedDate] = useState<DateFilter>('all')
+  const [appliedDuration, setAppliedDuration] = useState<DurationFilter>('all')
+  const [appliedSort, setAppliedSort] = useState<SortFilter>('recent')
+  const [draftMethod, setDraftMethod] = useState('all')
+  const [draftDate, setDraftDate] = useState<DateFilter>('all')
+  const [draftDuration, setDraftDuration] = useState<DurationFilter>('all')
+  const [draftSort, setDraftSort] = useState<SortFilter>('recent')
   const [detailPlan, setDetailPlan] = useState<Plan | null>(null)
   const [detailModalOpen, setDetailModalOpen] = useState(false)
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
@@ -235,10 +257,95 @@ export function PlanView() {
     fetchPlanes()
   }, [addToast])
 
-  const filteredPlans = plans.filter((p) =>
-    p.producto.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    p.moduloEvaluado.toLowerCase().includes(searchQuery.toLowerCase())
-  )
+  const filteredPlans = useMemo(() => {
+    const normalizedQuery = normalizeText(searchQuery)
+    const queryTokens = normalizedQuery.length > 0 ? normalizedQuery.split(/\s+/).filter(Boolean) : []
+
+    const today = new Date()
+    const startToday = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+    const startMonth = new Date(today.getFullYear(), today.getMonth(), 1)
+    const endMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0)
+
+    const byFilters = plans.filter((plan) => {
+      if (appliedMethod !== 'all' && plan.metodo !== appliedMethod) return false
+
+      const planDate = plan.fecha && isValidDate(plan.fecha) ? new Date(`${plan.fecha}T00:00:00`) : null
+
+      const matchesDate =
+        appliedDate === 'all' ||
+        (appliedDate === 'upcoming' && !!planDate && planDate >= startToday) ||
+        (appliedDate === 'past' && !!planDate && planDate < startToday) ||
+        (appliedDate === 'thisMonth' && !!planDate && planDate >= startMonth && planDate <= endMonth)
+
+      if (!matchesDate) return false
+
+      const matchesDuration =
+        appliedDuration === 'all' ||
+        (appliedDuration === 'short' && plan.duracionMinutos <= 30) ||
+        (appliedDuration === 'medium' && plan.duracionMinutos > 30 && plan.duracionMinutos <= 60) ||
+        (appliedDuration === 'long' && plan.duracionMinutos > 60)
+
+      if (!matchesDuration) return false
+
+      if (queryTokens.length === 0) return true
+
+      const searchable = normalizeText(
+        [
+          plan.producto,
+          plan.moduloEvaluado,
+          plan.objetivo,
+          plan.perfilUsuarios,
+          plan.metodo,
+          plan.lugar,
+          plan.fecha,
+          String(plan.duracionMinutos),
+        ]
+          .filter(Boolean)
+          .join(' ')
+      )
+
+      return queryTokens.every((token) => searchable.includes(token))
+    })
+
+    return byFilters.sort((a, b) => {
+      if (appliedSort === 'az') {
+        return a.producto.localeCompare(b.producto, 'es', { sensitivity: 'base' })
+      }
+      const dateA = a.fecha && isValidDate(a.fecha) ? new Date(`${a.fecha}T00:00:00`).getTime() : 0
+      const dateB = b.fecha && isValidDate(b.fecha) ? new Date(`${b.fecha}T00:00:00`).getTime() : 0
+      return appliedSort === 'oldest' ? dateA - dateB : dateB - dateA
+    })
+  }, [plans, searchQuery, appliedMethod, appliedDate, appliedDuration, appliedSort])
+
+  const activeFilterCount =
+    (appliedMethod !== 'all' ? 1 : 0) +
+    (appliedSort !== 'recent' ? 1 : 0)
+
+  const syncDraftWithApplied = () => {
+    setDraftMethod(appliedMethod)
+    setDraftDate(appliedDate)
+    setDraftDuration(appliedDuration)
+    setDraftSort(appliedSort)
+  }
+
+  const applyFilters = () => {
+    setAppliedMethod(draftMethod)
+    setAppliedDate(draftDate)
+    setAppliedDuration(draftDuration)
+    setAppliedSort(draftSort)
+    setFilterOpen(false)
+  }
+
+  const clearAllFilters = () => {
+    setAppliedMethod('all')
+    setAppliedDate('all')
+    setAppliedDuration('all')
+    setAppliedSort('recent')
+    setDraftMethod('all')
+    setDraftDate('all')
+    setDraftDuration('all')
+    setDraftSort('recent')
+  }
 
   const onSubmit = async (data: PlanFormValues) => {
     if (editingId) {
@@ -353,7 +460,8 @@ export function PlanView() {
           <h2 className="text-2xl font-bold">{editingId ? 'Editar Plan' : 'Crear Plan de Prueba'}</h2>
         </div>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 max-w-2xl">
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 max-w-3xl">
+          {/* Fila 1: Producto, Módulo */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium mb-1">Producto</label>
@@ -376,7 +484,10 @@ export function PlanView() {
               />
               {errors.moduloEvaluado && <p className="text-destructive text-xs mt-1">{errors.moduloEvaluado.message}</p>}
             </div>
+          </div>
 
+          {/* Fila 2: Perfil, Lugar */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium mb-1">Perfil de Usuarios</label>
               <input
@@ -388,6 +499,20 @@ export function PlanView() {
               {errors.perfilUsuarios && <p className="text-destructive text-xs mt-1">{errors.perfilUsuarios.message}</p>}
             </div>
 
+            <div>
+              <label className="block text-sm font-medium mb-1">Lugar</label>
+              <input
+                type="text"
+                placeholder="Ubicación física o remota"
+                {...register('lugar')}
+                className="w-full px-3 py-2 border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+              {errors.lugar && <p className="text-destructive text-xs mt-1">{errors.lugar.message}</p>}
+            </div>
+          </div>
+
+          {/* Fila 3: Método, Fecha, Duración */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium mb-1">Método</label>
               <select
@@ -415,7 +540,7 @@ export function PlanView() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1">Duración (minutos)</label>
+              <label className="block text-sm font-medium mb-1">Duración (min)</label>
               <input
                 type="number"
                 placeholder="45"
@@ -423,17 +548,6 @@ export function PlanView() {
                 className="w-full px-3 py-2 border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
               />
               {errors.duracionMinutos && <p className="text-destructive text-xs mt-1">{errors.duracionMinutos.message}</p>}
-            </div>
-
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium mb-1">Lugar</label>
-              <input
-                type="text"
-                placeholder="Ubicación física o remota"
-                {...register('lugar')}
-                className="w-full px-3 py-2 border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-              />
-              {errors.lugar && <p className="text-destructive text-xs mt-1">{errors.lugar.message}</p>}
             </div>
           </div>
 
@@ -476,14 +590,11 @@ export function PlanView() {
             </div>
           </div>
 
-          <div className="flex gap-3 pt-4">
-            <Button type="submit" className="flex items-center gap-2">
-              <Save className="w-4 h-4" />
-              {editingId ? 'Actualizar' : 'Crear'}
-            </Button>
+          <div className="flex gap-3 pt-4 justify-end">
             <Button
               type="button"
               variant="outline"
+              size="sm"
               onClick={() => {
                 setIsForm(false)
                 reset()
@@ -491,6 +602,10 @@ export function PlanView() {
               }}
             >
               Cancelar
+            </Button>
+            <Button type="submit" size="sm" className="flex items-center gap-2">
+              <Save className="w-4 h-4" />
+              {editingId ? 'Actualizar' : 'Crear'}
             </Button>
           </div>
         </form>
@@ -508,16 +623,103 @@ export function PlanView() {
         </Button>
       </div>
 
-      <div className="relative">
-        <Search className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
-        <input
-          type="text"
-          placeholder="Buscar por producto o módulo..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full pl-10 pr-4 py-2 border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-        />
+      <div className="space-y-2">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
+            <input
+              type="text"
+              placeholder="Buscar por producto, módulo, método, lugar..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full rounded-xl border border-input bg-background py-2.5 pl-10 pr-4 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+            />
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-10 gap-2 rounded-xl border-primary/40"
+            onClick={() => {
+              syncDraftWithApplied()
+              setFilterOpen(true)
+            }}
+          >
+            <Filter className="h-4 w-4" />
+            Filtro
+            {activeFilterCount > 0 && (
+              <span className="ml-1 rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-primary-foreground">
+                {activeFilterCount}
+              </span>
+            )}
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          {filteredPlans.length} resultado{filteredPlans.length === 1 ? '' : 's'} encontrados
+        </p>
       </div>
+
+      {filterOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-xl overflow-hidden rounded-2xl border border-border/80 bg-card shadow-2xl">
+            <div className="flex items-center justify-between border-b border-border p-5">
+              <h3 className="text-2xl font-semibold tracking-tight">Filtro</h3>
+              <button
+                onClick={() => setFilterOpen(false)}
+                className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                aria-label="Cerrar filtros"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+
+            <div className="space-y-5 p-5">
+              <div>
+                <label className="mb-2 block text-sm font-medium">Método</label>
+                <div className="relative">
+                  <select
+                    value={draftMethod}
+                    onChange={(e) => setDraftMethod(e.target.value)}
+                    className="w-full appearance-none rounded-xl border border-input bg-background px-4 py-2.5 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  >
+                    <option value="all">Todos los métodos</option>
+                    {METODOS.map((m) => (
+                      <option key={m} value={m}>
+                        {m}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium">Orden</label>
+                <div className="relative">
+                  <select
+                    value={draftSort}
+                    onChange={(e) => setDraftSort(e.target.value as SortFilter)}
+                    className="w-full appearance-none rounded-xl border border-input bg-background px-4 py-2.5 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  >
+                    <option value="recent">Más recientes</option>
+                    <option value="oldest">Más antiguos</option>
+                    <option value="az">Producto A-Z</option>
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between border-t border-border p-5 gap-2">
+              <Button type="button" variant="outline" className="flex-1" onClick={clearAllFilters}>
+                Reiniciar
+              </Button>
+              <Button type="button" className="flex-1" onClick={applyFilters}>
+                Aplicar
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filteredPlans.map((plan) => (
