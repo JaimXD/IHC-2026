@@ -1,10 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { ListChecks, Plus, Pencil, Trash2, Save, X, Search, Eye, MoreVertical } from 'lucide-react'
+import { ListChecks, Plus, Pencil, Trash2, Save, X, Search, Eye, MoreVertical, Filter, ChevronDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ToastContainer } from '@/components/toast-container'
 import { useToasts } from '@/hooks/use-toasts'
@@ -49,6 +49,15 @@ interface PruebaOption {
   value: string
   label: string
 }
+
+type SortFilter = 'recent' | 'oldest' | 'az'
+
+const normalizeText = (value: string) =>
+  value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
 
 const EMPTY_FORM: TareaFormValues = {
   pruebaId: '',
@@ -114,6 +123,11 @@ export function TareasView() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<Tarea | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
+  const [filterOpen, setFilterOpen] = useState(false)
+  const [appliedSort, setAppliedSort] = useState<SortFilter>('recent')
+  const [draftSort, setDraftSort] = useState<SortFilter>('recent')
+  const [appliedProof, setAppliedProof] = useState('all')
+  const [draftProof, setDraftProof] = useState('all')
   const [detailTarea, setDetailTarea] = useState<Tarea | null>(null)
   const [detailModalOpen, setDetailModalOpen] = useState(false)
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
@@ -170,10 +184,31 @@ export function TareasView() {
     fetchTareasYPruebas()
   }, [addToast])
 
-  const filteredTareas = tareas.filter((t) =>
-    t.escenario.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    t.metricaPrincipal.toLowerCase().includes(searchQuery.toLowerCase())
-  )
+  const filteredTareas = useMemo(() => {
+    const normalizedQuery = normalizeText(searchQuery)
+    const queryTokens = normalizedQuery.length > 0 ? normalizedQuery.split(/\s+/).filter(Boolean) : []
+
+    const bySearch = tareas.filter((t) => {
+      if (appliedProof !== 'all' && t.pruebaId !== appliedProof) return false
+
+      if (queryTokens.length === 0) return true
+
+      const searchable = normalizeText(
+        [t.escenario, t.metricaPrincipal, t.criterioExito].filter(Boolean).join(' ')
+      )
+
+      return queryTokens.every((token) => searchable.includes(token))
+    })
+
+    return bySearch.sort((a, b) => {
+      if (appliedSort === 'az') {
+        return a.escenario.localeCompare(b.escenario, 'es', { sensitivity: 'base' })
+      }
+      const dateA = new Date(a.createdAt).getTime()
+      const dateB = new Date(b.createdAt).getTime()
+      return appliedSort === 'oldest' ? dateA - dateB : dateB - dateA
+    })
+  }, [tareas, searchQuery, appliedSort, appliedProof])
 
   const getApiBaseUrl = () => process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
 
@@ -296,6 +331,28 @@ export function TareasView() {
     setOpenMenuId(null)
   }
 
+  const activeFilterCount =
+    (appliedSort !== 'recent' ? 1 : 0) +
+    (appliedProof !== 'all' ? 1 : 0)
+
+  const syncDraftWithApplied = () => {
+    setDraftSort(appliedSort)
+    setDraftProof(appliedProof)
+  }
+
+  const applyFilters = () => {
+    setAppliedSort(draftSort)
+    setAppliedProof(draftProof)
+    setFilterOpen(false)
+  }
+
+  const clearAllFilters = () => {
+    setAppliedSort('recent')
+    setDraftSort('recent')
+    setAppliedProof('all')
+    setDraftProof('all')
+  }
+
   if (isForm) {
     return (
       <div className="space-y-6">
@@ -404,16 +461,103 @@ export function TareasView() {
         </Button>
       </div>
 
-      <div className="relative">
-        <Search className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
-        <input
-          type="text"
-          placeholder="Buscar por escenario o métrica..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full pl-10 pr-4 py-2 border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-        />
+      <div className="space-y-2">
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
+            <input
+              type="text"
+              placeholder="Buscar por escenario, métrica, criterio..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full rounded-xl border border-input bg-background py-2.5 pl-10 pr-4 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+            />
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-10 gap-2 rounded-xl border-primary/40"
+            onClick={() => {
+              syncDraftWithApplied()
+              setFilterOpen(true)
+            }}
+          >
+            <Filter className="h-4 w-4" />
+            Filtro
+            {activeFilterCount > 0 && (
+              <span className="ml-1 rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-primary-foreground">
+                {activeFilterCount}
+              </span>
+            )}
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          {filteredTareas.length} resultado{filteredTareas.length === 1 ? '' : 's'} encontrados
+        </p>
       </div>
+
+      {filterOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-xl overflow-hidden rounded-2xl border border-border/80 bg-card shadow-2xl">
+            <div className="flex items-center justify-between border-b border-border p-5">
+              <h3 className="text-2xl font-semibold tracking-tight">Filtro</h3>
+              <button
+                onClick={() => setFilterOpen(false)}
+                className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                aria-label="Cerrar filtros"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+
+            <div className="space-y-5 p-5">
+              <div>
+                <label className="mb-2 block text-sm font-medium">Prueba</label>
+                <div className="relative">
+                  <select
+                    value={draftProof}
+                    onChange={(e) => setDraftProof(e.target.value)}
+                    className="w-full appearance-none rounded-xl border border-input bg-background px-4 py-2.5 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  >
+                    <option value="all">Todas las pruebas</option>
+                    {pruebasOptions.map((p) => (
+                      <option key={p.value} value={p.value}>
+                        {p.label}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium">Orden</label>
+                <div className="relative">
+                  <select
+                    value={draftSort}
+                    onChange={(e) => setDraftSort(e.target.value as SortFilter)}
+                    className="w-full appearance-none rounded-xl border border-input bg-background px-4 py-2.5 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  >
+                    <option value="recent">Más recientes</option>
+                    <option value="oldest">Más antiguos</option>
+                    <option value="az">Escenario A-Z</option>
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between border-t border-border p-5 gap-2">
+              <Button type="button" variant="outline" className="flex-1" onClick={clearAllFilters}>
+                Reiniciar
+              </Button>
+              <Button type="button" className="flex-1" onClick={applyFilters}>
+                Aplicar
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {filteredTareas.map((tarea) => (
