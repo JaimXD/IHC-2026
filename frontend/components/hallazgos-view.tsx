@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -108,15 +109,24 @@ function DetailModal({
   onClose: () => void
   pruebasOptions: PruebaOption[]
 }) {
-  if (!isOpen || !hallazgo) return null
+  // 1. Estado para asegurar que el componente solo se renderice en el cliente
+  const [mounted, setMounted] = useState(false)
 
-  return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div className="bg-card rounded-lg shadow-lg max-w-2xl w-full max-h-96 overflow-y-auto">
-        <div className="p-6 border-b border-border flex justify-between items-center sticky top-0 bg-card">
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  if (!isOpen || !hallazgo || !mounted) return null
+
+  // 2. Envolver el retorno en createPortal
+  return createPortal(
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4">
+      {/* 3. Se ajustó max-h-[90vh] para mejor responsive */}
+      <div className="bg-card rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="p-6 border-b border-border flex justify-between items-center sticky top-0 bg-card z-10">
           <h2 className="text-lg font-semibold">Detalles del Hallazgo</h2>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
-            <X className="w-5 h-5" />
+          <button onClick={onClose} aria-label="Cerrar detalles del hallazgo" className="text-muted-foreground hover:text-foreground focus:outline-none focus:ring-2 focus:ring-primary rounded-lg p-1">
+            <X className="w-5 h-5" aria-hidden="true" />
           </button>
         </div>
         <div className="p-6 space-y-4">
@@ -150,11 +160,12 @@ function DetailModal({
           </div>
           <div>
             <p className="text-xs text-muted-foreground font-semibold uppercase mb-1">Recomendación de Mejora</p>
-            <p className="text-sm">{hallazgo.recomendacionMejora}</p>
+            <p className="text-sm whitespace-pre-wrap">{hallazgo.recomendacionMejora}</p>
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body // <- El portal inyecta esto al final del <body>
   )
 }
 
@@ -169,12 +180,20 @@ export function HallazgosView() {
   const [detailHallazgo, setDetailHallazgo] = useState<Hallazgo | null>(null)
   const [detailModalOpen, setDetailModalOpen] = useState(false)
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
+  const [isPruebaDropdownOpen, setIsPruebaDropdownOpen] = useState(false)
+  const [pruebaSearchTerm, setPruebaSearchTerm] = useState('')
+  const [mounted, setMounted] = useState(false)
   const { toasts, addToast, removeToast } = useToasts()
 
-  const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm<HallazgoFormValues>({
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  const { register, handleSubmit, reset, setValue, watch, formState: { errors, isSubmitting } } = useForm<HallazgoFormValues>({
     resolver: zodResolver(hallazgoSchema),
     defaultValues: EMPTY_FORM,
   })
+  const watchPruebaId = watch('pruebaId')
 
   const getApiBaseUrl = () => process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
 
@@ -233,7 +252,7 @@ export function HallazgosView() {
 
         const mappedPruebas = pruebasData.map((item) => ({
           value: String(item.id),
-          label: `${item.producto} - ${item.modulo_evaluado}`,
+          label: item.producto,
         }))
 
         setHallazgos(mapped)
@@ -254,6 +273,10 @@ export function HallazgosView() {
     const matchSeveridad = filterSeveridad === '' || h.severidad === filterSeveridad
     return matchSearch && matchSeveridad
   })
+
+  const filteredPruebasOptions = pruebasOptions.filter((p) =>
+    p.label.toLowerCase().includes(pruebaSearchTerm.toLowerCase())
+  )
 
   const onSubmit = async (data: HallazgoFormValues) => {
     if (editingId) {
@@ -311,6 +334,8 @@ export function HallazgosView() {
     }
     setIsForm(false)
     reset()
+    setIsPruebaDropdownOpen(false)
+    setPruebaSearchTerm('')
   }
 
   const handleEdit = (hallazgo: Hallazgo) => {
@@ -322,6 +347,8 @@ export function HallazgosView() {
     })
     setIsForm(true)
     setOpenMenuId(null)
+    setIsPruebaDropdownOpen(false)
+    setPruebaSearchTerm('')
   }
 
   const handleDelete = async (hallazgo: Hallazgo) => {
@@ -359,6 +386,8 @@ export function HallazgosView() {
               setIsForm(false)
               reset()
               setEditingId(null)
+              setIsPruebaDropdownOpen(false)
+              setPruebaSearchTerm('')
             }}
             className="p-2 hover:bg-secondary rounded-lg transition-colors"
             aria-label="Volver"
@@ -369,18 +398,82 @@ export function HallazgosView() {
         </div>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 max-w-2xl">
-          <div>
-            <label htmlFor="prueba-select" className="block text-sm font-medium mb-1">Prueba</label>
-            <select
-              id="prueba-select"
-              {...register('pruebaId')}
-              className="w-full px-3 py-2 border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-background"
+          <div className="relative">
+            <label htmlFor="prueba-combobox-button" className="block text-sm font-medium mb-1">Prueba</label>
+
+            {/* 1. Botón corregido con FOCUS RING y ARIA CONTROLS */}
+            <button
+              id="prueba-combobox-button"
+              type="button"
+              onClick={() => setIsPruebaDropdownOpen(!isPruebaDropdownOpen)}
+              aria-haspopup="listbox"
+              aria-expanded={isPruebaDropdownOpen}
+              aria-controls={isPruebaDropdownOpen ? "prueba-listbox" : undefined}
+              className={`w-full px-3 py-2 border rounded-lg text-sm bg-background cursor-pointer flex justify-between items-center transition-colors focus:outline-none focus:ring-2 focus:ring-primary ${
+                errors.pruebaId ? 'border-destructive' : 'border-input hover:border-primary'
+              }`}
             >
-              <option value="">Selecciona una prueba</option>
-              {pruebasOptions.map((p) => (
-                <option key={p.value} value={p.value}>{p.label}</option>
-              ))}
-            </select>
+              <span className={`truncate ${watchPruebaId ? 'text-foreground' : 'text-muted-foreground'}`}>
+                {watchPruebaId
+                  ? pruebasOptions.find((p) => p.value === watchPruebaId)?.label
+                  : 'Selecciona o busca una prueba...'}
+              </span>
+              <svg className="w-4 h-4 text-muted-foreground shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
+              </svg>
+            </button>
+
+            {isPruebaDropdownOpen && (
+              <div className="absolute z-50 w-full mt-1 bg-card border border-border rounded-lg shadow-xl flex flex-col">
+                <div className="p-2 sticky top-0 bg-card border-b border-border rounded-t-lg">
+                  <div className="relative">
+                    <label htmlFor="prueba-search-input" className="sr-only">Buscar prueba</label>
+                    <Search className="absolute left-2 top-2.5 w-4 h-4 text-muted-foreground" aria-hidden="true" />
+                    <input
+                      id="prueba-search-input"
+                      type="text"
+                      placeholder="Escribe para buscar..."
+                      value={pruebaSearchTerm}
+                      onChange={(e) => setPruebaSearchTerm(e.target.value)}
+                      onClick={(e) => e.stopPropagation()}
+                      className="w-full pl-8 pr-3 py-2 border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-background"
+                      autoFocus
+                    />
+                  </div>
+                </div>
+
+                {/* 2. Se agregó el ID "prueba-listbox" para conectar con el botón */}
+                <div id="prueba-listbox" className="max-h-48 overflow-y-auto p-1" role="listbox" aria-label="Opciones de prueba">
+                  {filteredPruebasOptions.map((p) => (
+                    <div
+                      key={p.value}
+                      role="option"
+                      aria-selected={watchPruebaId === p.value}
+                      onClick={() => {
+                        setValue('pruebaId', p.value, { shouldValidate: true })
+                        setIsPruebaDropdownOpen(false)
+                        setPruebaSearchTerm('')
+                      }}
+                      className={`px-3 py-2 text-sm cursor-pointer rounded-md transition-colors ${
+                        watchPruebaId === p.value
+                          ? 'bg-primary/10 text-primary font-medium'
+                          : 'hover:bg-secondary text-foreground'
+                      }`}
+                    >
+                      {p.label}
+                    </div>
+                  ))}
+
+                  {filteredPruebasOptions.length === 0 && (
+                    <div className="px-3 py-4 text-sm text-center text-muted-foreground">
+                      No se encontraron resultados para "{pruebaSearchTerm}"
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <input type="hidden" {...register('pruebaId')} />
             {errors.pruebaId && <p className="text-destructive text-xs mt-1">{errors.pruebaId.message}</p>}
           </div>
 
@@ -493,9 +586,13 @@ export function HallazgosView() {
           </div>
 
           <div className="flex gap-3 pt-4">
-            <Button type="submit" className="flex items-center gap-2">
-              <Save className="w-4 h-4" />
-              {editingId ? 'Actualizar' : 'Crear'}
+            <Button 
+              type="submit" 
+              className="flex items-center gap-2"
+              disabled={isSubmitting}
+            >
+              <Save className="w-4 h-4" aria-hidden="true" />
+              {isSubmitting ? 'Guardando...' : (editingId ? 'Actualizar' : 'Crear')}
             </Button>
             <Button
               type="button"
@@ -504,6 +601,8 @@ export function HallazgosView() {
                 setIsForm(false)
                 reset()
                 setEditingId(null)
+                setIsPruebaDropdownOpen(false)
+                setPruebaSearchTerm('')
               }}
             >
               Cancelar
@@ -523,7 +622,7 @@ export function HallazgosView() {
           >
             Síntesis de Hallazgos
           </h1>
-        <Button onClick={() => { setIsForm(true); reset(); setEditingId(null) }} className="flex items-center gap-2">
+        <Button onClick={() => { setIsForm(true); reset(); setEditingId(null); setIsPruebaDropdownOpen(false); setPruebaSearchTerm('') }} className="flex items-center gap-2">
           <Plus className="w-4 h-4" />
           Crear Hallazgo
         </Button>
@@ -635,9 +734,9 @@ export function HallazgosView() {
         </div>
       )}
 
-      {deleteConfirm && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-card rounded-lg shadow-lg p-6 max-w-sm">
+      {deleteConfirm && createPortal(
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4">
+          <div className="bg-card rounded-lg shadow-xl p-6 max-w-sm">
             <h2 className="text-lg font-semibold mb-4">Eliminar hallazgo</h2>
             <p className="text-sm text-muted-foreground mb-6">¿Estás seguro que deseas eliminar este hallazgo? Esta acción no se puede deshacer.</p>
             <div className="flex gap-3">
@@ -649,7 +748,8 @@ export function HallazgosView() {
               </Button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       <DetailModal
@@ -658,7 +758,12 @@ export function HallazgosView() {
         onClose={() => setDetailModalOpen(false)}
         pruebasOptions={pruebasOptions}
       />
-      <ToastContainer toasts={toasts} onRemove={removeToast} />
+      
+      {/* Toast Container en el Portal para que siempre flote en pantalla */}
+      {mounted && createPortal(
+        <ToastContainer toasts={toasts} onRemove={removeToast} />,
+        document.body
+      )}
     </div>
   )
 }
