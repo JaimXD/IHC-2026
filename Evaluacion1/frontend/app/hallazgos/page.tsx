@@ -2,7 +2,7 @@ import { AppShell } from "@/components/app-shell"
 import { HallazgosView } from "@/components/hallazgos-view"
 
 export const metadata = {
-  title: "Síntesis de Hallazgos | Usability Test Dashboard",
+  title: "Gestión de Hallazgos | Usability Test Dashboard",
 }
 
 export default function HallazgosPage() {
