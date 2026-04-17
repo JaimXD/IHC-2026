@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Plus, Pencil, Trash2, Save, X, Search, Eye, MoreVertical } from 'lucide-react'
+import { Plus, Pencil, Trash2, Save, X, Search, Eye, MoreVertical, Info } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ToastContainer } from '@/components/toast-container'
 import { useToasts } from '@/hooks/use-toasts'
@@ -114,7 +114,7 @@ function DetailModal({
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
       <div className="bg-card rounded-lg shadow-lg max-w-2xl w-full max-h-96 overflow-y-auto">
         <div className="p-6 border-b border-border flex justify-between items-center sticky top-0 bg-card">
-          <h3 className="text-lg font-semibold">Detalles del Hallazgo</h3>
+          <h2 className="text-lg font-semibold">Detalles del Hallazgo</h2>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
             <X className="w-5 h-5" />
           </button>
@@ -370,8 +370,9 @@ export function HallazgosView() {
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 max-w-2xl">
           <div>
-            <label className="block text-sm font-medium mb-1">Prueba</label>
+            <label htmlFor="prueba-select" className="block text-sm font-medium mb-1">Prueba</label>
             <select
+              id="prueba-select"
               {...register('pruebaId')}
               className="w-full px-3 py-2 border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-background"
             >
@@ -384,8 +385,9 @@ export function HallazgosView() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-1">Frecuencia</label>
+            <label htmlFor="frecuencia-input" className="block text-sm font-medium mb-1">Frecuencia</label>
             <input
+              id="frecuencia-input"
               type="text"
               placeholder="Ej: 5 de 8 participantes"
               {...register('frecuencia')}
@@ -394,48 +396,95 @@ export function HallazgosView() {
             {errors.frecuencia && <p className="text-destructive text-xs mt-1">{errors.frecuencia.message}</p>}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">Severidad</label>
-              <select
-                {...register('severidad')}
-                className="w-full px-3 py-2 border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-background"
-              >
-                <option value="baja">Baja</option>
-                <option value="media">Media</option>
-                <option value="alta">Alta</option>
-                <option value="critica">Crítica</option>
-              </select>
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <label htmlFor="severidad-select" className="block text-sm font-medium">Severidad</label>
+                  <div className="relative group">
+                    <button
+                      type="button"
+                      aria-label="Información sobre severidad"
+                      aria-describedby="severidad-help"
+                      className="p-1 rounded cursor-help flex items-center focus:outline-none focus:ring-2 focus:ring-primary"
+                    >
+                      <Info
+                        aria-hidden="true"
+                        focusable="false"
+                        className="w-4 h-4 text-muted-foreground hover:text-foreground"
+                      />
+                    </button>
+
+                    <div
+                      id="severidad-help"
+                      role="tooltip"
+                      className="hidden group-hover:block group-focus-within:block absolute left-full top-0 ml-2 w-64 bg-card text-card-foreground border border-border rounded-lg shadow-lg z-[9999] p-4"
+                    >
+                      <p className="text-sm font-semibold mb-3">Niveles de severidad</p>
+                      <div className="space-y-2.5">
+                        {[
+                          { color: 'bg-red-700', label: 'Crítico', desc: 'Impide al usuario completar la tarea. Requiere solución inmediata.' },
+                          { color: 'bg-red-500', label: 'Mayor (Alta)', desc: 'Causa frustración y lentitud, pero el usuario logra terminar.' },
+                          { color: 'bg-amber-500', label: 'Media', desc: 'Afecta la fluidez de la experiencia, pero con impacto moderado.' },
+                          { color: 'bg-emerald-500', label: 'Menor (Baja)', desc: 'Fricción visual o de diseño que no impide el uso.' },
+                        ].map(({ color, label, desc }) => (
+                          <div key={label} className="flex gap-2.5 items-start">
+                            <span className={`w-2 h-2 rounded-full ${color} mt-1 flex-shrink-0`} />
+                            <div>
+                              <p className="text-xs font-medium">{label}</p>
+                              <p className="text-xs text-muted-foreground leading-snug">{desc}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <select
+                  id="severidad-select"
+                  {...register('severidad')}
+                  className="w-full px-3 py-2 border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-background font-medium"
+                >
+                  <option value="critica">Crítico</option>
+                  <option value="alta">Mayor (Alta)</option>
+                  <option value="media">Media</option>
+                  <option value="baja">Menor (Baja)</option>
+                </select>
+              </div>
+
+              <div>
+                <label htmlFor="prioridad-select" className="block text-sm font-medium mb-1">Prioridad</label>
+                <select
+                  id="prioridad-select"
+                  {...register('prioridad')}
+                  className="w-full px-3 py-2 border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-background"
+                >
+                  <option value="baja">Baja</option>
+                  <option value="media">Media</option>
+                  <option value="alta">Alta</option>
+                </select>
+              </div>
+
+              <div>
+                <label htmlFor="estado-select" className="block text-sm font-medium mb-1">Estado</label>
+                <select
+                  id="estado-select"
+                  {...register('estado')}
+                  className="w-full px-3 py-2 border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-background"
+                >
+                  <option value="abierto">Abierto</option>
+                  <option value="en_progreso">En Progreso</option>
+                  <option value="resuelto">Resuelto</option>
+                </select>
+              </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium mb-1">Prioridad</label>
-              <select
-                {...register('prioridad')}
-                className="w-full px-3 py-2 border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-background"
-              >
-                <option value="baja">Baja</option>
-                <option value="media">Media</option>
-                <option value="alta">Alta</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-1">Estado</label>
-              <select
-                {...register('estado')}
-                className="w-full px-3 py-2 border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-background"
-              >
-                <option value="abierto">Abierto</option>
-                <option value="en_progreso">En Progreso</option>
-                <option value="resuelto">Resuelto</option>
-              </select>
-            </div>
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-1">Recomendación de Mejora</label>
+            <label htmlFor="recomendacion-textarea" className="block text-sm font-medium mb-1">Recomendación de Mejora</label>
             <textarea
+              id="recomendacion-textarea"
               placeholder="Describe la recomendación de mejora"
               {...register('recomendacionMejora')}
               className="w-full px-3 py-2 border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary min-h-24"
@@ -466,9 +515,14 @@ export function HallazgosView() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" style={{ backgroundColor: '#ffffff' }}>
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">Síntesis de Hallazgos</h2>
+          <h1
+            className="text-2xl font-bold"
+            style={{ color: '#111827' }}
+          >
+            Síntesis de Hallazgos
+          </h1>
         <Button onClick={() => { setIsForm(true); reset(); setEditingId(null) }} className="flex items-center gap-2">
           <Plus className="w-4 h-4" />
           Crear Hallazgo
@@ -477,8 +531,10 @@ export function HallazgosView() {
 
       <div className="space-y-3">
         <div className="relative">
+          <label htmlFor="hallazgos-search" className="sr-only">Buscar hallazgos por frecuencia o recomendación</label>
           <Search className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
           <input
+            id="hallazgos-search"
             type="text"
             placeholder="Buscar por frecuencia o recomendación..."
             value={searchQuery}
@@ -487,7 +543,9 @@ export function HallazgosView() {
           />
         </div>
 
+        <label htmlFor="hallazgos-filter-severidad" className="sr-only">Filtrar hallazgos por severidad</label>
         <select
+          id="hallazgos-filter-severidad"
           value={filterSeveridad}
           onChange={(e) => setFilterSeveridad(e.target.value)}
           className="px-3 py-2 border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-background"
@@ -509,7 +567,7 @@ export function HallazgosView() {
                   e.stopPropagation()
                   setOpenMenuId(openMenuId === hallazgo.id ? null : hallazgo.id)
                 }}
-                className="absolute -top-2 -right-2 p-2 hover:bg-secondary rounded-lg transition-colors z-10"
+                className="absolute top-2 right-2 p-2 hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-primary rounded-lg transition-colors z-10"
                 aria-label="Más opciones"
               >
                 <MoreVertical className="w-4 h-4 text-muted-foreground group-hover:text-foreground" />
@@ -580,7 +638,7 @@ export function HallazgosView() {
       {deleteConfirm && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-card rounded-lg shadow-lg p-6 max-w-sm">
-            <h3 className="text-lg font-semibold mb-4">Eliminar hallazgo</h3>
+            <h2 className="text-lg font-semibold mb-4">Eliminar hallazgo</h2>
             <p className="text-sm text-muted-foreground mb-6">¿Estás seguro que deseas eliminar este hallazgo? Esta acción no se puede deshacer.</p>
             <div className="flex gap-3">
               <Button variant="destructive" onClick={() => handleDelete(deleteConfirm)}>
