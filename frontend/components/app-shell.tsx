@@ -87,7 +87,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {/* Sidebar header - Logo area */}
         <div className="relative flex items-center gap-3 px-6 py-6 border-b border-sidebar-border/45">
           <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-br from-sidebar-primary to-sidebar-primary/70 shadow-lg shadow-sidebar-primary/25">
-            <Target className="w-5 h-5 text-sidebar-primary-foreground" aria-hidden="true" />
+            <Target className="w-5 h-5 text-sidebar-primary-foreground" aria-hidden="true" focusable="false" />
           </div>
           <div className="flex-1">
             <p className="text-base font-bold leading-tight text-sidebar-foreground tracking-tight">U-Test</p>
@@ -98,7 +98,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             onClick={() => setSidebarOpen(false)}
             aria-label="Cerrar menú"
           >
-            <X className="w-5 h-5" aria-hidden="true" />
+            <X className="w-5 h-5" aria-hidden="true" focusable="false" />
           </button>
         </div>
 
@@ -138,7 +138,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     ? "bg-sidebar-primary-foreground/20" 
                     : "bg-sidebar-accent/50 group-hover:bg-sidebar-accent"
                 )}>
-                  <Icon className="w-[18px] h-[18px]" aria-hidden="true" />
+                  <Icon className="w-[18px] h-[18px]" aria-hidden="true" focusable="false" />
                 </div>
                 
                 <div className="flex-1 min-w-0">
@@ -163,6 +163,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   isActive ? "text-sidebar-primary-foreground/70" : "text-sidebar-foreground/30 group-hover:translate-x-0.5"
                 )}
                 aria-hidden="true"
+                focusable="false"
                 />
               </Link>
             )
@@ -196,7 +197,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             aria-expanded={sidebarOpen}
             aria-label="Abrir menú de navegación"
           >
-            <Menu className="w-5 h-5" aria-hidden="true" />
+            <Menu className="w-5 h-5" aria-hidden="true" focusable="false" />
           </Button>
           <div className="flex items-center gap-2">
             <span className="text-sm font-semibold text-foreground">

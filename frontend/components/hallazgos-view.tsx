@@ -614,11 +614,11 @@ export function HallazgosView() {
   }
 
   return (
-    <div className="space-y-6" style={{ backgroundColor: '#ffffff' }}>
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
           <h1
-            className="text-2xl font-bold"
-            style={{ color: '#111827' }}
+            className="text-2xl font-bold px-2 py-1 rounded-md"
+            style={{ color: '#111827', backgroundColor: '#f8fafc' }}
           >
             Síntesis de Hallazgos
           </h1>
@@ -630,7 +630,7 @@ export function HallazgosView() {
 
       <div className="space-y-3">
         <div className="relative">
-          <label htmlFor="hallazgos-search" className="sr-only">Buscar hallazgos por frecuencia o recomendación</label>
+          <label htmlFor="hallazgos-search" className="sr-only">Buscar hallazgos</label>
           <Search className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
           <input
             id="hallazgos-search"
@@ -641,89 +641,73 @@ export function HallazgosView() {
             className="w-full pl-10 pr-4 py-2 border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
           />
         </div>
-
-        <label htmlFor="hallazgos-filter-severidad" className="sr-only">Filtrar hallazgos por severidad</label>
-        <select
-          id="hallazgos-filter-severidad"
-          value={filterSeveridad}
-          onChange={(e) => setFilterSeveridad(e.target.value)}
-          className="px-3 py-2 border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-background"
-        >
-          <option value="">Todas las severidades</option>
-          <option value="baja">Baja</option>
-          <option value="media">Media</option>
-          <option value="alta">Alta</option>
-          <option value="critica">Crítica</option>
-        </select>
+        <div className="flex gap-2 flex-wrap">
+          {[
+            { value: '', label: 'Todas', activeClass: 'bg-foreground text-background border-foreground' },
+            { value: 'critica', label: 'Crítica', activeClass: 'bg-red-700 text-white border-red-700' },
+            { value: 'alta', label: 'Alta', activeClass: 'bg-red-500 text-white border-red-500' },
+            { value: 'media', label: 'Media', activeClass: 'bg-amber-500 text-white border-amber-500' },
+            { value: 'baja', label: 'Baja', activeClass: 'bg-emerald-500 text-white border-emerald-500' },
+          ].map(({ value, label, activeClass }) => (
+            <button
+              key={value}
+              onClick={() => setFilterSeveridad(value)}
+              className={`px-3 py-1 rounded-full text-xs font-medium border transition-all ${
+                filterSeveridad === value
+                  ? activeClass
+                  : 'bg-background text-muted-foreground border-input hover:border-foreground/40'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-3">
         {filteredHallazgos.map((hallazgo) => (
           <div key={hallazgo.id} className="border border-border rounded-lg shadow-sm hover:shadow-md transition-shadow p-4 bg-card relative group cursor-pointer" onClick={() => handleViewDetails(hallazgo)}>
-            <div className="relative">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setOpenMenuId(openMenuId === hallazgo.id ? null : hallazgo.id)
-                }}
-                className="absolute top-2 right-2 p-2 hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-primary rounded-lg transition-colors z-10"
-                aria-label="Más opciones"
-              >
-                <MoreVertical className="w-4 h-4 text-muted-foreground group-hover:text-foreground" />
-              </button>
-
-              {openMenuId === hallazgo.id && (
-                <div className="absolute right-0 top-8 bg-card border border-border rounded-lg shadow-lg z-20">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      handleViewDetails(hallazgo)
-                    }}
-                    className="w-full px-4 py-2 text-sm text-foreground hover:bg-secondary flex items-center gap-2 border-b border-border"
-                  >
-                    <Eye className="w-4 h-4" />
-                    Ver detalles
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      handleEdit(hallazgo)
-                    }}
-                    className="w-full px-4 py-2 text-sm text-foreground hover:bg-secondary flex items-center gap-2 border-b border-border"
-                  >
-                    <Pencil className="w-4 h-4" />
-                    Editar
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setDeleteConfirm(hallazgo)
-                      setOpenMenuId(null)
-                    }}
-                    className="w-full px-4 py-2 text-sm text-destructive hover:bg-destructive/10 flex items-center gap-2"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    Eliminar
-                  </button>
-                </div>
-              )}
-            </div>
-
-            <div className="grid grid-cols-3 gap-2 mb-3">
-              {/* Solid color cube/badge for severity */}
-              <span className={`px-3 py-1.5 rounded-md text-xs font-bold uppercase tracking-wide text-center shadow-sm ${SEVERIDAD_LABELS[hallazgo.severidad]?.class}`}>
+            <div className="flex items-start gap-3 mb-3">
+              <span className={`px-2.5 py-1 rounded text-xs font-bold uppercase tracking-wide flex-shrink-0 ${SEVERIDAD_LABELS[hallazgo.severidad]?.class}`}>
                 {SEVERIDAD_LABELS[hallazgo.severidad]?.label}
               </span>
-              <span className={`px-2 py-1 rounded text-xs font-medium border ${ESTADO_LABELS[hallazgo.estado]?.class}`}>
-                {ESTADO_LABELS[hallazgo.estado]?.label}
-              </span>
-              <span className={`px-2 py-1 rounded text-xs font-medium text-center ${PRIORIDAD_LABELS[hallazgo.prioridad]?.class}`}>
-                P. {PRIORIDAD_LABELS[hallazgo.prioridad]?.label}
-              </span>
+              <p className="text-sm font-medium text-foreground leading-snug line-clamp-2 flex-1 pt-0.5">
+                {hallazgo.recomendacionMejora}
+              </p>
             </div>
-
-            <p className="text-xs text-muted-foreground mb-2">Frecuencia: <span className="font-medium text-foreground">{hallazgo.frecuencia}</span></p>
-            <p className="text-sm line-clamp-2">{hallazgo.recomendacionMejora}</p>
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">
+                {hallazgo.frecuencia}
+              </span>
+              <div className="flex items-center gap-2">
+                <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${ESTADO_LABELS[hallazgo.estado]?.class}`}>
+                  {ESTADO_LABELS[hallazgo.estado]?.label}
+                </span>
+                <span className={`text-xs font-medium ${PRIORIDAD_LABELS[hallazgo.prioridad]?.class}`}>
+                  P. {PRIORIDAD_LABELS[hallazgo.prioridad]?.label}
+                </span>
+                <button
+                  onClick={(e) => { e.stopPropagation(); setOpenMenuId(openMenuId === hallazgo.id ? null : hallazgo.id) }}
+                  className="p-1 hover:bg-secondary rounded focus:outline-none focus:ring-2 focus:ring-primary transition-colors"
+                  aria-label="Más opciones"
+                >
+                  <MoreVertical className="w-4 h-4 text-muted-foreground" />
+                </button>
+              </div>
+            </div>
+            {openMenuId === hallazgo.id && (
+              <div className="absolute right-4 bottom-4 bg-card border border-border rounded-lg shadow-lg z-20">
+                <button onClick={(e) => { e.stopPropagation(); handleViewDetails(hallazgo) }} className="w-full px-4 py-2 text-sm text-foreground hover:bg-secondary flex items-center gap-2 border-b border-border">
+                  <Eye className="w-4 h-4" /> Ver detalles
+                </button>
+                <button onClick={(e) => { e.stopPropagation(); handleEdit(hallazgo) }} className="w-full px-4 py-2 text-sm text-foreground hover:bg-secondary flex items-center gap-2 border-b border-border">
+                  <Pencil className="w-4 h-4" /> Editar
+                </button>
+                <button onClick={(e) => { e.stopPropagation(); setDeleteConfirm(hallazgo); setOpenMenuId(null) }} className="w-full px-4 py-2 text-sm text-destructive hover:bg-destructive/10 flex items-center gap-2">
+                  <Trash2 className="w-4 h-4" /> Eliminar
+                </button>
+              </div>
+            )}
           </div>
         ))}
       </div>
