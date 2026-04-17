@@ -1,0 +1,38 @@
+# Dependencies
+backend/node_modules/
+frontend/node_modules/
+node_modules/
+frontend/.next/
+
+# Environment variables
+backend/.env
+.env
+.env.local
+.env.*.local
+
+# Frontend (v0/Next sandbox)
+frontend/__v0_runtime_loader.js
+frontend/__v0_devtools.tsx
+frontend/__v0_jsx-dev-runtime.ts
+frontend/.snowflake/
+frontend/.v0-trash/
+frontend/.vercel/
+frontend/next.user-config.*
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+backend/logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+frontend/.next
