@@ -24,6 +24,9 @@ import {
   Legend,
   Cell,
 } from "recharts"
+import { BreadcrumbNav } from "./breadcrumb-nav"
+import { DashboardSkeleton } from "./dashboard-skeleton"
+import { LastUpdateIndicator } from "./last-update-indicator"
 
 interface ApiObservacion {
   id: number
@@ -88,7 +91,9 @@ export function DashboardView() {
   const [tareas, setTareas] = useState<ApiTarea[]>([])
   const [participantes, setParticipantes] = useState<ApiParticipante[]>([])
   const [loading, setLoading] = useState(true)
+  const [isRefreshing, setIsRefreshing] = useState(false)
   const [fetchError, setFetchError] = useState<string | null>(null)
+  const [lastUpdateTime, setLastUpdateTime] = useState<Date | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -96,6 +101,8 @@ export function DashboardView() {
     const fetchDashboardData = async (isBackgroundRefresh = false) => {
       if (!isBackgroundRefresh) {
         setLoading(true)
+      } else {
+        setIsRefreshing(true)
       }
 
       try {
@@ -124,14 +131,19 @@ export function DashboardView() {
         setHallazgos(hallData)
         setTareas(tareasData)
         setParticipantes(partData)
+        setLastUpdateTime(new Date())
         setFetchError(null)
       } catch (error) {
         console.error(error)
         if (cancelled) return
         setFetchError("No se pudieron cargar algunas métricas en tiempo real")
       } finally {
-        if (!cancelled && !isBackgroundRefresh) {
-          setLoading(false)
+        if (!cancelled) {
+          if (!isBackgroundRefresh) {
+            setLoading(false)
+          } else {
+            setIsRefreshing(false)
+          }
         }
       }
     }
@@ -146,6 +158,42 @@ export function DashboardView() {
       window.clearInterval(intervalId)
     }
   }, [])
+
+  const handleManualRefresh = async () => {
+    setIsRefreshing(true)
+    try {
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"
+      const [obsRes, hallRes, tareasRes, partRes] = await Promise.all([
+        fetch(`${baseUrl}/api/observaciones`, { cache: "no-store" }),
+        fetch(`${baseUrl}/api/hallazgos`, { cache: "no-store" }),
+        fetch(`${baseUrl}/api/tareas`, { cache: "no-store" }),
+        fetch(`${baseUrl}/api/participantes`, { cache: "no-store" }),
+      ])
+
+      if (!obsRes.ok || !hallRes.ok || !tareasRes.ok || !partRes.ok) {
+        throw new Error("No se pudieron cargar las métricas del dashboard")
+      }
+
+      const [obsData, hallData, tareasData, partData] = await Promise.all([
+        obsRes.json() as Promise<ApiObservacion[]>,
+        hallRes.json() as Promise<ApiHallazgo[]>,
+        tareasRes.json() as Promise<ApiTarea[]>,
+        partRes.json() as Promise<ApiParticipante[]>,
+      ])
+
+      setObservaciones(obsData)
+      setHallazgos(hallData)
+      setTareas(tareasData)
+      setParticipantes(partData)
+      setLastUpdateTime(new Date())
+      setFetchError(null)
+    } catch (error) {
+      console.error(error)
+      setFetchError("No se pudieron cargar algunas métricas en tiempo real")
+    } finally {
+      setIsRefreshing(false)
+    }
+  }
 
   const metrics = useMemo(() => {
     const totalObservaciones = observaciones.length
@@ -286,227 +334,253 @@ export function DashboardView() {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      {/* Page header */}
-      <div className="relative overflow-hidden rounded-2xl border border-border/70 bg-card/80 px-6 py-6 shadow-sm backdrop-blur-sm">
-        <div className="pointer-events-none absolute -top-20 right-0 h-44 w-44 rounded-full bg-primary/10 blur-3xl" aria-hidden="true" />
-        <div className="pointer-events-none absolute -bottom-16 left-1/4 h-36 w-36 rounded-full bg-info/10 blur-3xl" aria-hidden="true" />
-        <span className="inline-flex items-center rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-primary">
-          Panel ejecutivo
-        </span>
-        <h1 className="mt-3 text-3xl font-bold tracking-tight text-foreground text-balance">Dashboard Principal</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Resumen general de las métricas de usabilidad capturadas en tiempo real.
-        </p>
-        <p className="mt-1 text-xs text-muted-foreground">Actualización automática cada 45 segundos.</p>
-        {fetchError && (
-          <p className="mt-2 text-xs text-destructive">{fetchError}</p>
-        )}
-        {loading && (
-          <p className="mt-2 text-xs text-muted-foreground">Cargando métricas...</p>
-        )}
+      {/* Breadcrumbs */}
+      <div className="px-1">
+        <BreadcrumbNav />
       </div>
 
-      {/* KPI Cards */}
-      <section aria-labelledby="kpi-heading">
-        <h2 id="kpi-heading" className="sr-only">Indicadores clave de rendimiento</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-          {metrics.kpiData.map((kpi) => {
-            const Icon = kpi.icon
-            return (
-              <article
-                key={kpi.id}
-                className={`group relative overflow-hidden rounded-2xl border ${kpi.border} bg-card/95 p-5 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md`}
-                aria-label={kpi.label}
-              >
-                <div className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-transparent via-primary/45 to-transparent opacity-40 group-hover:opacity-90" aria-hidden="true" />
-                <div className="flex items-start gap-4">
-                  <div className={`${kpi.bg} rounded-xl p-2.5 shrink-0 ring-1 ring-black/5`}>
-                    <Icon className={`w-5 h-5 ${kpi.color}`} aria-hidden="true" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{kpi.label}</p>
-                    <p className={`text-3xl font-bold mt-0.5 leading-none ${kpi.color}`}>{kpi.value}</p>
-                    <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{kpi.subtext}</p>
-                  </div>
-                </div>
-              </article>
-            )
-          })}
-        </div>
-      </section>
+      {/* Show skeleton loaders while loading */}
+      {loading && <DashboardSkeleton />}
 
-      {/* Charts row */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Bar chart: Tareas */}
-        <section
-          aria-labelledby="tareas-chart-heading"
-          className="rounded-2xl border border-border/80 bg-card/95 p-5 shadow-sm lg:col-span-2"
-        >
-          <div className="flex items-center gap-2 mb-4">
-            <TrendingUp className="w-4 h-4 text-primary" aria-hidden="true" />
-            <h2 id="tareas-chart-heading" className="text-sm font-semibold text-foreground">
-              Resultado por Tarea
-            </h2>
-          </div>
-          <div className="h-56 rounded-xl border border-border/60 bg-muted/15 px-2 pt-2" role="img" aria-label="Gráfico de barras: éxito y fallo por tarea">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={metrics.tareasData} margin={{ top: 4, right: 8, bottom: 0, left: -20 }}>
-                <CartesianGrid strokeDasharray="4 4" className="stroke-border/70" />
-                <XAxis dataKey="tarea" tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} />
-                <YAxis tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} />
-                <Tooltip
-                  contentStyle={{
-                    background: "var(--color-card)",
-                    border: "1px solid var(--color-border)",
-                    borderRadius: "10px",
-                    fontSize: "12px",
-                    boxShadow: "0 12px 24px rgba(15, 23, 42, 0.12)",
-                  }}
-                />
-                <Legend wrapperStyle={{ fontSize: "11px" }} />
-                <Bar dataKey="exito" name="Éxito" fill="var(--color-success)" radius={[6, 6, 0, 0]} />
-                <Bar dataKey="fallo" name="Fallo" fill="var(--color-destructive)" radius={[6, 6, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </section>
-
-        {/* Severity donut-like chart */}
-        <section
-          aria-labelledby="severidad-chart-heading"
-          className="rounded-2xl border border-border/80 bg-card/95 p-5 shadow-sm"
-        >
-          <div className="flex items-center gap-2 mb-4">
-            <Activity className="w-4 h-4 text-primary" aria-hidden="true" />
-            <h2 id="severidad-chart-heading" className="text-sm font-semibold text-foreground">
-              Hallazgos por Severidad
-            </h2>
-          </div>
-          <div className="h-40 rounded-xl border border-border/60 bg-muted/15" role="img" aria-label="Gráfico radial de hallazgos por severidad">
-            <ResponsiveContainer width="100%" height="100%">
-              <RadialBarChart
-                innerRadius="30%"
-                outerRadius="90%"
-                data={metrics.severidadData}
-                startAngle={90}
-                endAngle={-270}
-              >
-                <RadialBar dataKey="value" label={false}>
-                  {metrics.severidadData.map((entry, index) => (
-                    <Cell key={index} fill={entry.fill} />
-                  ))}
-                </RadialBar>
-                <Tooltip
-                  contentStyle={{
-                    background: "var(--color-card)",
-                    border: "1px solid var(--color-border)",
-                    borderRadius: "10px",
-                    fontSize: "12px",
-                    boxShadow: "0 12px 24px rgba(15, 23, 42, 0.12)",
-                  }}
-                />
-              </RadialBarChart>
-            </ResponsiveContainer>
-          </div>
-          <ul className="mt-3 space-y-1.5" aria-label="Leyenda de severidad">
-            {metrics.severidadData.map((item) => (
-              <li key={item.name} className="flex items-center justify-between rounded-md px-2 py-1 text-xs hover:bg-muted/40 transition-colors">
-                <span className="flex items-center gap-1.5 text-muted-foreground">
-                  <span
-                    className="inline-block w-2.5 h-2.5 rounded-full"
-                    style={{ background: item.fill }}
-                    aria-hidden="true"
-                  />
-                  {item.name}
+      {/* Main content - only show when not loading */}
+      {!loading && (
+        <>
+          {/* Page header */}
+          <div className="relative overflow-hidden rounded-2xl border border-border/70 bg-card/80 px-6 py-6 shadow-sm backdrop-blur-sm">
+            <div className="pointer-events-none absolute -top-20 right-0 h-44 w-44 rounded-full bg-primary/10 blur-3xl" aria-hidden="true" />
+            <div className="pointer-events-none absolute -bottom-16 left-1/4 h-36 w-36 rounded-full bg-info/10 blur-3xl" aria-hidden="true" />
+            
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1">
+                <span className="inline-flex items-center rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-primary">
+                  Panel ejecutivo
                 </span>
-                <span className="font-semibold text-foreground">{item.value}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      </div>
-
-      {/* Recent findings table */}
-      <section aria-labelledby="findings-heading" className="overflow-hidden rounded-2xl border border-border/80 bg-card/95 shadow-sm">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border/80 bg-muted/20">
-          <div className="flex items-center gap-2">
-            <Lightbulb className="w-4 h-4 text-primary" aria-hidden="true" />
-            <h2 id="findings-heading" className="text-sm font-semibold text-foreground">
-              Hallazgos Recientes
-            </h2>
-          </div>
-          <a
-            href="/hallazgos"
-            className="text-xs text-primary hover:underline flex items-center gap-0.5 focus:outline-none focus:ring-2 focus:ring-ring rounded"
-            aria-label="Ver todos los hallazgos"
-          >
-            Ver todos <ChevronRight className="w-3 h-3" aria-hidden="true" />
-          </a>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm" role="table" aria-label="Tabla de hallazgos recientes">
-            <thead>
-              <tr className="border-b border-border/80 bg-muted/35">
-                <th scope="col" className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">ID</th>
-                <th scope="col" className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Descripción</th>
-                <th scope="col" className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Severidad</th>
-                <th scope="col" className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Estado</th>
-              </tr>
-            </thead>
-            <tbody>
-              {metrics.recentFindings.map((f, i) => (
-                <tr
-                  key={f.id}
-                  className={`border-b border-border/70 last:border-0 hover:bg-primary/5 transition-colors ${i % 2 === 1 ? "bg-muted/10" : ""}`}
-                >
-                  <td className="px-5 py-3 font-mono text-xs text-muted-foreground">{f.id}</td>
-                  <td className="px-5 py-3 text-sm text-foreground leading-relaxed max-w-xs">{f.descripcion}</td>
-                  <td className="px-5 py-3">
-                    <span className={`inline-block rounded-full px-2.5 py-1 border text-xs font-semibold ${SEVERITY_BADGE[f.severidad] ?? ""}`}>
-                      {f.severidad}
-                    </span>
-                  </td>
-                  <td className="px-5 py-3">
-                    <span className={`inline-block rounded-full px-2.5 py-1 text-xs font-semibold ${STATUS_BADGE[f.estado] ?? ""}`}>
-                      {f.estado}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-              {metrics.recentFindings.length === 0 && (
-                <tr>
-                  <td colSpan={4} className="px-5 py-4 text-center text-xs text-muted-foreground">
-                    Aún no hay hallazgos registrados.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      {/* Participants summary */}
-      <section aria-labelledby="participants-heading" className="rounded-2xl border border-border/80 bg-card/95 p-5 shadow-sm">
-        <div className="flex items-center gap-2 mb-4">
-          <Users className="w-4 h-4 text-primary" aria-hidden="true" />
-          <h2 id="participants-heading" className="text-sm font-semibold text-foreground">
-            Participantes
-          </h2>
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          {[
-            { label: "Total registrados", value: String(metrics.participantsSummary.total) },
-            { label: "Sesiones completadas", value: String(metrics.participantsSummary.completadas) },
-            { label: "En progreso", value: String(metrics.participantsSummary.enProgreso) },
-            { label: "Pendientes", value: String(metrics.participantsSummary.pendientes) },
-          ].map((item) => (
-            <div key={item.label} className="rounded-xl border border-border/70 bg-muted/10 px-4 py-4 text-center">
-              <p className="text-3xl font-bold leading-none text-primary">{item.value}</p>
-              <p className="text-xs text-muted-foreground mt-2 leading-relaxed">{item.label}</p>
+                <h1 className="mt-3 text-3xl font-bold tracking-tight text-foreground text-balance">Dashboard Principal</h1>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Resumen general de las métricas de usabilidad capturadas en tiempo real.
+                </p>
+              </div>
+              
+              {/* Last Update Indicator */}
+              <div className="shrink-0 pt-2">
+                <LastUpdateIndicator
+                  lastUpdateTime={lastUpdateTime}
+                  isRefreshing={isRefreshing}
+                  onRefresh={handleManualRefresh}
+                />
+              </div>
             </div>
-          ))}
-        </div>
-      </section>
+
+            {fetchError && (
+              <div className="mt-4 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+                ⚠️ {fetchError}
+              </div>
+            )}
+          </div>
+
+          {/* KPI Cards */}
+          <section aria-labelledby="kpi-heading">
+            <h2 id="kpi-heading" className="sr-only">Indicadores clave de rendimiento</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+              {metrics.kpiData.map((kpi) => {
+                const Icon = kpi.icon
+                return (
+                  <article
+                    key={kpi.id}
+                    className={`group relative overflow-hidden rounded-2xl border ${kpi.border} bg-card/95 p-5 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md`}
+                    aria-label={kpi.label}
+                  >
+                    <div className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-transparent via-primary/45 to-transparent opacity-40 group-hover:opacity-90" aria-hidden="true" />
+                    <div className="flex items-start gap-4">
+                      <div className={`${kpi.bg} rounded-xl p-2.5 shrink-0 ring-1 ring-black/5`}>
+                        <Icon className={`w-5 h-5 ${kpi.color}`} aria-hidden="true" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{kpi.label}</p>
+                        <p className={`text-3xl font-bold mt-0.5 leading-none ${kpi.color}`}>{kpi.value}</p>
+                        <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{kpi.subtext}</p>
+                      </div>
+                    </div>
+                  </article>
+                )
+              })}
+            </div>
+          </section>
+
+          {/* Charts row */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            {/* Bar chart: Tareas */}
+            <section
+              aria-labelledby="tareas-chart-heading"
+              className="rounded-2xl border border-border/80 bg-card/95 p-5 shadow-sm lg:col-span-2"
+            >
+              <div className="flex items-center gap-2 mb-4">
+                <TrendingUp className="w-4 h-4 text-primary" aria-hidden="true" />
+                <h2 id="tareas-chart-heading" className="text-sm font-semibold text-foreground">
+                  Resultado por Tarea
+                </h2>
+              </div>
+              <div className="h-56 rounded-xl border border-border/60 bg-muted/15 px-2 pt-2" role="img" aria-label="Gráfico de barras: éxito y fallo por tarea">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={metrics.tareasData} margin={{ top: 4, right: 8, bottom: 0, left: -20 }}>
+                    <CartesianGrid strokeDasharray="4 4" className="stroke-border/70" />
+                    <XAxis dataKey="tarea" tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} />
+                    <YAxis tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} />
+                    <Tooltip
+                      contentStyle={{
+                        background: "var(--color-card)",
+                        border: "1px solid var(--color-border)",
+                        borderRadius: "10px",
+                        fontSize: "12px",
+                        boxShadow: "0 12px 24px rgba(15, 23, 42, 0.12)",
+                      }}
+                    />
+                    <Legend wrapperStyle={{ fontSize: "11px" }} />
+                    <Bar dataKey="exito" name="Éxito" fill="var(--color-success)" radius={[6, 6, 0, 0]} />
+                    <Bar dataKey="fallo" name="Fallo" fill="var(--color-destructive)" radius={[6, 6, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </section>
+
+            {/* Severity donut-like chart */}
+            <section
+              aria-labelledby="severidad-chart-heading"
+              className="rounded-2xl border border-border/80 bg-card/95 p-5 shadow-sm"
+            >
+              <div className="flex items-center gap-2 mb-4">
+                <Activity className="w-4 h-4 text-primary" aria-hidden="true" />
+                <h2 id="severidad-chart-heading" className="text-sm font-semibold text-foreground">
+                  Hallazgos por Severidad
+                </h2>
+              </div>
+              <div className="h-40 rounded-xl border border-border/60 bg-muted/15" role="img" aria-label="Gráfico radial de hallazgos por severidad">
+                <ResponsiveContainer width="100%" height="100%">
+                  <RadialBarChart
+                    innerRadius="30%"
+                    outerRadius="90%"
+                    data={metrics.severidadData}
+                    startAngle={90}
+                    endAngle={-270}
+                  >
+                    <RadialBar dataKey="value" label={false}>
+                      {metrics.severidadData.map((entry, index) => (
+                        <Cell key={index} fill={entry.fill} />
+                      ))}
+                    </RadialBar>
+                    <Tooltip
+                      contentStyle={{
+                        background: "var(--color-card)",
+                        border: "1px solid var(--color-border)",
+                        borderRadius: "10px",
+                        fontSize: "12px",
+                        boxShadow: "0 12px 24px rgba(15, 23, 42, 0.12)",
+                      }}
+                    />
+                  </RadialBarChart>
+                </ResponsiveContainer>
+              </div>
+              <ul className="mt-3 space-y-1.5" aria-label="Leyenda de severidad">
+                {metrics.severidadData.map((item) => (
+                  <li key={item.name} className="flex items-center justify-between rounded-md px-2 py-1 text-xs hover:bg-muted/40 transition-colors">
+                    <span className="flex items-center gap-1.5 text-muted-foreground">
+                      <span
+                        className="inline-block w-2.5 h-2.5 rounded-full"
+                        style={{ background: item.fill }}
+                        aria-hidden="true"
+                      />
+                      {item.name}
+                    </span>
+                    <span className="font-semibold text-foreground">{item.value}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          </div>
+
+          {/* Recent findings table */}
+          <section aria-labelledby="findings-heading" className="overflow-hidden rounded-2xl border border-border/80 bg-card/95 shadow-sm">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border/80 bg-muted/20">
+              <div className="flex items-center gap-2">
+                <Lightbulb className="w-4 h-4 text-primary" aria-hidden="true" />
+                <h2 id="findings-heading" className="text-sm font-semibold text-foreground">
+                  Hallazgos Recientes
+                </h2>
+              </div>
+              <a
+                href="/hallazgos"
+                className="text-xs text-primary hover:underline flex items-center gap-0.5 focus:outline-none focus:ring-2 focus:ring-ring rounded"
+                aria-label="Ver todos los hallazgos"
+              >
+                Ver todos <ChevronRight className="w-3 h-3" aria-hidden="true" />
+              </a>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm" role="table" aria-label="Tabla de hallazgos recientes">
+                <thead>
+                  <tr className="border-b border-border/80 bg-muted/35">
+                    <th scope="col" className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">ID</th>
+                    <th scope="col" className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Descripción</th>
+                    <th scope="col" className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Severidad</th>
+                    <th scope="col" className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Estado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {metrics.recentFindings.map((f, i) => (
+                    <tr
+                      key={f.id}
+                      className={`border-b border-border/70 last:border-0 hover:bg-primary/5 transition-colors ${i % 2 === 1 ? "bg-muted/10" : ""}`}
+                    >
+                      <td className="px-5 py-3 font-mono text-xs text-muted-foreground">{f.id}</td>
+                      <td className="px-5 py-3 text-sm text-foreground leading-relaxed max-w-xs">{f.descripcion}</td>
+                      <td className="px-5 py-3">
+                        <span className={`inline-block rounded-full px-2.5 py-1 border text-xs font-semibold ${SEVERITY_BADGE[f.severidad] ?? ""}`}>
+                          {f.severidad}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3">
+                        <span className={`inline-block rounded-full px-2.5 py-1 text-xs font-semibold ${STATUS_BADGE[f.estado] ?? ""}`}>
+                          {f.estado}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                  {metrics.recentFindings.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="px-5 py-4 text-center text-xs text-muted-foreground">
+                        Aún no hay hallazgos registrados.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          {/* Participants summary */}
+          <section aria-labelledby="participants-heading" className="rounded-2xl border border-border/80 bg-card/95 p-5 shadow-sm">
+            <div className="flex items-center gap-2 mb-4">
+              <Users className="w-4 h-4 text-primary" aria-hidden="true" />
+              <h2 id="participants-heading" className="text-sm font-semibold text-foreground">
+                Participantes
+              </h2>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              {[
+                { label: "Total registrados", value: String(metrics.participantsSummary.total) },
+                { label: "Sesiones completadas", value: String(metrics.participantsSummary.completadas) },
+                { label: "En progreso", value: String(metrics.participantsSummary.enProgreso) },
+                { label: "Pendientes", value: String(metrics.participantsSummary.pendientes) },
+              ].map((item) => (
+                <div key={item.label} className="rounded-xl border border-border/70 bg-muted/10 px-4 py-4 text-center">
+                  <p className="text-3xl font-bold leading-none text-primary">{item.value}</p>
+                  <p className="text-xs text-muted-foreground mt-2 leading-relaxed">{item.label}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+        </>
+      )}
     </div>
   )
 }
