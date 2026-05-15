@@ -4,6 +4,8 @@ const path = require('path');
 require('dotenv').config();
 
 const initializeDatabase = () => {
+  const databaseName = process.env.DB_NAME || 'usability_dashboard';
+
   // Conexión sin base de datos para crear la BD
   const connection = mysql.createConnection({
     host: process.env.DB_HOST || 'localhost',
@@ -20,7 +22,7 @@ const initializeDatabase = () => {
     }
 
     // Primero crear la BD si no existe
-    connection.query('CREATE DATABASE IF NOT EXISTS usability_dashboard', (error) => {
+    connection.query(`CREATE DATABASE IF NOT EXISTS ${databaseName}`, (error) => {
       if (error) {
         console.warn('⚠️  Error al crear BD:', error.message);
         connection.end();
@@ -28,7 +30,7 @@ const initializeDatabase = () => {
       }
 
       // Cambiar a la BD
-      connection.query('USE usability_dashboard', (error) => {
+      connection.query(`USE ${databaseName}`, (error) => {
         if (error) {
           console.warn('⚠️  Error al seleccionar BD:', error.message);
           connection.end();

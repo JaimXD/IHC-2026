@@ -1,11 +1,13 @@
 const mysql = require('mysql2');
 require('dotenv').config();
 
+const databaseName = process.env.DB_NAME || 'usability_dashboard';
+
 const db = mysql.createConnection({
   host: process.env.DB_HOST || 'localhost',
   user: process.env.DB_USER || 'root',
   password: process.env.DB_PASSWORD || '',
-  database: process.env.DB_NAME || 'ihc_2026'
+  database: databaseName
 });
 
 db.connect((err) => {
