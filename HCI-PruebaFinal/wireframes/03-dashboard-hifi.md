@@ -7,6 +7,10 @@
 
 ---
 
+![Dashboard Hi-Fi Wireframe](03-dashboard-hifi.png)
+
+---
+
 ## 🎨 Paleta de Colores Hi-Fi (Tema Claro)
 
 ### Colores Primarios

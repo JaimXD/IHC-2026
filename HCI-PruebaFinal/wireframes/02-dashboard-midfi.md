@@ -7,6 +7,10 @@
 
 ---
 
+![Dashboard Mid-Fi Wireframe](02-dashboard-midfi.png)
+
+---
+
 ## 📏 Especificación de Grilla y Espaciado
 
 ```
