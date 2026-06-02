@@ -14,6 +14,7 @@ import {
   Target,
   Users,
   ChevronRight,
+  Sparkles,
 } from "lucide-react"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
@@ -54,6 +55,12 @@ const navItems = [
     label: "Hallazgos",
     icon: FileSearch,
     description: "Síntesis y análisis",
+  },
+  {
+    href: "/sprint-backlog",
+    label: "Sprint Backlog IA",
+    icon: Sparkles,
+    description: "Generador inteligente",
   },
 ]
 
