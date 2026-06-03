@@ -42,6 +42,7 @@ const EMPTY_FORM: ParticipanteFormValues = {
 export function ParticipantesView() {
   const [participantes, setParticipantes] = useState<Participante[]>([])
   const [isForm, setIsForm] = useState(false)
+  const [flowStartTs, setFlowStartTs] = useState<number | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<Participante | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
@@ -135,6 +136,18 @@ export function ParticipantesView() {
         setParticipantes((prev) => prev.map((p) => (p.id === editingId ? { ...p, ...data } : p)))
         addToast('success', 'Participante actualizado')
         setEditingId(null)
+        // report usability metric
+        try {
+          if (flowStartTs) {
+            const duration = Date.now() - flowStartTs
+            await fetch(`${getApiBaseUrl()}/api/usability/results`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ tarea: 'registrar_participante', action: 'editar', duration, success: true })
+            })
+          }
+        } catch (e) {
+          // non-blocking
+        }
       } catch (error) {
         const message = error instanceof Error ? error.message : 'No se pudo actualizar el participante'
         addToast('error', 'No se pudo actualizar el participante', message)
@@ -164,6 +177,18 @@ export function ParticipantesView() {
 
         setParticipantes((prev) => [...prev, newParticipante])
         addToast('success', 'Participante creado')
+        // report usability metric
+        try {
+          if (flowStartTs) {
+            const duration = Date.now() - flowStartTs
+            await fetch(`${getApiBaseUrl()}/api/usability/results`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ tarea: 'registrar_participante', action: 'crear', duration, success: true })
+            })
+          }
+        } catch (e) {
+          // non-blocking
+        }
       } catch (error) {
         const message = error instanceof Error ? error.message : 'No se pudo crear el participante'
         addToast('error', 'No se pudo crear el participante', message)
@@ -172,6 +197,7 @@ export function ParticipantesView() {
     }
 
     setIsForm(false)
+    setFlowStartTs(null)
     reset(EMPTY_FORM)
   }
 
@@ -182,6 +208,7 @@ export function ParticipantesView() {
     })
     setEditingId(participante.id)
     setIsForm(true)
+    setFlowStartTs(Date.now())
   }
 
   const handleDelete = async () => {
@@ -222,6 +249,7 @@ export function ParticipantesView() {
                 setIsForm(false)
                 setEditingId(null)
                 reset(EMPTY_FORM)
+                setFlowStartTs(null)
               }}
               className="p-2 hover:bg-secondary rounded-md transition-colors"
               aria-label="Cerrar formulario"
@@ -277,10 +305,12 @@ export function ParticipantesView() {
                   setIsForm(false)
                   setEditingId(null)
                   reset(EMPTY_FORM)
+                  setFlowStartTs(null)
                 }}
               >
                 Cancelar
               </Button>
+              
               <Button type="submit" className="flex items-center gap-2">
                 <Save className="w-4 h-4" />
                 {editingId ? 'Actualizar' : 'Crear'}
@@ -296,7 +326,7 @@ export function ParticipantesView() {
               <Users className="w-6 h-6" />
               Participantes
             </h2>
-            <Button onClick={() => setIsForm(true)} className="flex items-center gap-2">
+            <Button onClick={() => { setIsForm(true); setFlowStartTs(Date.now()) }} className="flex items-center gap-2">
               <Plus className="w-4 h-4" />
               Nuevo Participante
             </Button>

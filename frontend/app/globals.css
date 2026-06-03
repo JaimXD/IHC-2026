@@ -105,4 +105,9 @@
   body {
     @apply bg-background text-foreground;
   }
+  /* Mejorar visibilidad de foco para accesibilidad */
+  :focus-visible {
+    outline: 3px solid color-mix(in srgb, var(--color-primary) 70%, black 30%);
+    outline-offset: 2px;
+  }
 }
