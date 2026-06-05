@@ -1,23 +1,23 @@
 const { GoogleGenAI } = require('@google/genai');
 const Ajv = require('ajv');
+const { buildPrompt, JSON_OPEN, JSON_CLOSE } = require('./sprintBacklogPrompt');
 
 const DEFAULT_MODEL = 'gemini-2.5-flash';
-const JSON_OPEN = '---BEGIN_JSON---';
-const JSON_CLOSE = '---END_JSON---';
 
 const schema = {
   type: 'object',
   properties: {
     userStories: {
       type: 'array',
+      minItems: 1,
       items: {
         type: 'object',
         properties: {
           id: { type: 'string' },
           title: { type: 'string' },
           description: { type: 'string' },
-          priority: { type: 'number' },
-          acceptanceCriteria: { type: 'array', items: { type: 'string' } }
+          priority: { type: 'number', minimum: 1, maximum: 5 },
+          acceptanceCriteria: { type: 'array', items: { type: 'string' }, minItems: 1 }
         },
         required: ['id', 'title', 'description', 'priority', 'acceptanceCriteria']
       }
@@ -27,13 +27,12 @@ const schema = {
       items: {
         type: 'object',
         properties: {
-          id: { type: 'string' },
+          userStoryId: { type: 'string' },
           title: { type: 'string' },
-          linkedStoryId: { type: 'string' },
-          estimateHours: { type: 'number' },
-          techNotes: { type: 'string' }
+          estimatedHours: { type: 'number' },
+          technicalNotes: { type: 'string' }
         },
-        required: ['id', 'title', 'linkedStoryId', 'estimateHours']
+        required: ['userStoryId', 'title', 'estimatedHours']
       }
     },
     prioritization: {
@@ -41,41 +40,26 @@ const schema = {
       items: {
         type: 'object',
         properties: {
-          itemId: { type: 'string' },
+          userStoryId: { type: 'string' },
           score: { type: 'number' },
-          reason: { type: 'string' }
+          justification: { type: 'string' }
         },
-        required: ['itemId', 'score', 'reason']
+        required: ['userStoryId', 'score', 'justification']
       }
     },
     sprintPlan: {
-      type: 'object',
-      properties: {
-        days: {
-          type: 'array',
-          items: {
-            type: 'object',
-            properties: {
-              day: { type: 'number' },
-              activities: { type: 'array', items: { type: 'string' } }
-            },
-            required: ['day', 'activities']
-          }
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          day: { type: 'number' },
+          activities: { type: 'array', items: { type: 'string' }, minItems: 1 },
+          suggestedOwner: { type: 'string' }
         },
-        suggestedOwners: {
-          type: 'array',
-          items: {
-            type: 'object',
-            properties: {
-              storyId: { type: 'string' },
-              participantId: { type: 'string' }
-            },
-            required: ['storyId', 'participantId']
-          }
-        }
+        required: ['day', 'activities']
       }
     },
-    markdown: { type: 'string' }
+    markdown: { type: 'string', minLength: 1 }
   },
   required: ['userStories', 'tasks', 'prioritization', 'sprintPlan', 'markdown']
 };
@@ -83,32 +67,43 @@ const schema = {
 const ajv = new Ajv({ allErrors: true, strict: false });
 const validate = ajv.compile(schema);
 
-const buildPrompt = (payload) => {
-  const instruction = [
-    'Eres un asistente experto en metodologías ágiles e Ingeniería de Software. Tu tarea es analizar datos de un "Usability Test Dashboard" y generar un borrador estructurado de un Sprint Backlog.',
-    '',
-    'INSTRUCCIONES DE ANÁLISIS:',
-    '1. Revisa el contexto del proyecto, métricas, plan de prueba, tareas, participantes, observaciones y hallazgos del INPUT JSON.',
-    '2. Genera hasta 8 Historias de Usuario principales basadas en los hallazgos y el plan de prueba. Cada historia debe incluir de 1 a 4 criterios de aceptación.',
-    '3. Sugiere Tareas Técnicas para cada historia, estimando el esfuerzo en horas y añadiendo notas técnicas útiles para los desarrolladores.',
-    '4. Prioriza las historias de usuario (del 1 al 5, donde 5 es la máxima prioridad) y provee una justificación corta en prioritization.',
-    '5. Propón una Organización Preliminar del Sprint según context.sprintDurationDays, con distribución por días y asignación sugerida de dueños (owners) basada en participantes del INPUT.',
-    '6. Incluye el campo markdown con un documento completo en español (encabezados #, ##, listas y tablas).',
-    '',
-    'REGLAS ESTRICTAS DE FORMATO:',
-    `RESPONDE ÚNICAMENTE con un objeto JSON válido entre ${JSON_OPEN} y ${JSON_CLOSE}. Sin saludos ni texto fuera de las marcas.`,
-    'Esquema requerido:',
-    '{"userStories":[{"id":"US-01","title":"...","description":"...","priority":5,"acceptanceCriteria":["..."]}],',
-    '"tasks":[{"id":"TK-01","title":"...","linkedStoryId":"US-01","estimateHours":4,"techNotes":"..."}],',
-    '"prioritization":[{"itemId":"US-01","score":5,"reason":"..."}],',
-    '"sprintPlan":{"days":[{"day":1,"activities":["..."]}],"suggestedOwners":[{"storyId":"US-01","participantId":"1"}]},',
-    '"markdown":"# Borrador Sprint Backlog\\n..."}',
-    '',
-    'Usa IDs US-01, US-02… y TK-01, TK-02…. priority y score van de 1 a 5. participantId es el id numérico del participante como string.',
-    'Si faltan datos, infiere con prudencia pero mantén el esquema completo.'
-  ].join('\n');
+const normalizeParsed = (parsed) => {
+  if (!parsed || typeof parsed !== 'object') return parsed;
 
-  return `${instruction}\n\nINPUT:\n${JSON.stringify(payload)}\n\n${JSON_OPEN}\n{}\n${JSON_CLOSE}`;
+  const userStories = Array.isArray(parsed.userStories) ? parsed.userStories : [];
+
+  const tasks = (parsed.tasks || []).map((t) => ({
+    userStoryId: t.userStoryId || t.linkedStoryId || t.storyId || '',
+    title: t.title || '',
+    estimatedHours: Number(t.estimatedHours ?? t.estimateHours ?? 0),
+    technicalNotes: t.technicalNotes || t.techNotes || ''
+  }));
+
+  const prioritization = (parsed.prioritization || []).map((p) => ({
+    userStoryId: p.userStoryId || p.itemId || '',
+    score: Number(p.score ?? p.priority ?? 3),
+    justification: p.justification || p.reason || ''
+  }));
+
+  let sprintPlan = parsed.sprintPlan;
+  if (sprintPlan && !Array.isArray(sprintPlan) && Array.isArray(sprintPlan.days)) {
+    sprintPlan = sprintPlan.days.map((d, i) => ({
+      day: d.day,
+      activities: d.activities || [],
+      suggestedOwner: sprintPlan.suggestedOwners?.[i]?.participantId
+        || sprintPlan.suggestedOwners?.find((o) => o.storyId)?.participantId
+        || ''
+    }));
+  }
+  if (!Array.isArray(sprintPlan)) sprintPlan = [];
+
+  return {
+    userStories,
+    tasks,
+    prioritization,
+    sprintPlan,
+    markdown: typeof parsed.markdown === 'string' ? parsed.markdown : ''
+  };
 };
 
 const extractJsonBetweenMarkers = (text) => {
@@ -132,7 +127,8 @@ const parseAndValidate = (rawText) => {
     throw new Error('Respuesta IA no es JSON válido');
   }
 
-  const valid = validate(parsed);
+  const normalized = normalizeParsed(parsed);
+  const valid = validate(normalized);
   if (!valid) {
     const errors = validate.errors || [];
     const msg = errors.map(e => `${e.instancePath} ${e.message}`).join('; ');
@@ -140,16 +136,16 @@ const parseAndValidate = (rawText) => {
     error.validationErrors = errors;
     throw error;
   }
-  return parsed;
+  return normalized;
 };
 
-const generateWithPayload = async (payload, opts = {}) => {
+const generateWithPayload = async ({ sprintDurationDays, teamSize, contextJSON }, opts = {}) => {
   const model = opts.model || DEFAULT_MODEL;
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error('GEMINI_API_KEY no configurada');
 
   const ai = new GoogleGenAI({ apiKey });
-  const prompt = buildPrompt(payload);
+  const prompt = buildPrompt({ sprintDurationDays, teamSize, contextJSON });
 
   const maxAttempts = (opts.retries && Number(opts.retries)) || 2;
   let attempt = 0;
@@ -160,7 +156,7 @@ const generateWithPayload = async (payload, opts = {}) => {
       const response = await ai.models.generateContent({
         model,
         contents: prompt,
-        config: { responseMimeType: 'application/json' }
+        config: { responseMimeType: 'text/plain' }
       });
       const text = response && (response.text || response.outputText || response.content || '');
       return parseAndValidate(text);

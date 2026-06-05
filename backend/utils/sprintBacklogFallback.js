@@ -1,8 +1,9 @@
+/** Prioridad 1 = más alta, 5 = más baja */
 const priorityFromHallazgo = (h) => {
   const p = (h.prioridad || '').toLowerCase();
-  if (p === 'alta' || p === 'critica' || p === 'crítica') return 5;
+  if (p === 'alta' || p === 'critica' || p === 'crítica') return 1;
   if (p === 'media') return 3;
-  return 2;
+  return 4;
 };
 
 const buildMarkdown = ({ planDePrueba, dashboard, userStories, tasks, prioritization, sprintPlan }) => {
@@ -14,12 +15,12 @@ const buildMarkdown = ({ planDePrueba, dashboard, userStories, tasks, prioritiza
     `- **Módulo:** ${planDePrueba.modulo_evaluado || 'N/A'}`,
     `- **Objetivo:** ${planDePrueba.objetivo || 'N/A'}`,
     '',
-    '## Métricas',
-    `| Métrica | Valor |`,
-    `|---------|-------|`,
-    `| Pruebas registradas | ${dashboard.totalPruebas} |`,
+    '## Métricas agregadas',
+    '| Métrica | Valor |',
+    '|---------|-------|',
     `| Tasa de éxito | ${dashboard.tasaExitoProm != null ? `${Math.round(dashboard.tasaExitoProm * 100)}%` : 'N/A'} |`,
     `| Errores totales | ${dashboard.erroresTotales} |`,
+    `| Tiempo promedio (s) | ${dashboard.tiempoPromedioSeg ?? 'N/A'} |`,
     '',
     '## Historias de usuario',
     ...userStories.flatMap(us => [
@@ -31,15 +32,15 @@ const buildMarkdown = ({ planDePrueba, dashboard, userStories, tasks, prioritiza
       ''
     ]),
     '## Tareas técnicas',
-    '| ID | Historia | Tarea | Horas |',
-    '|----|----------|-------|-------|',
-    ...tasks.map(t => `| ${t.id} | ${t.linkedStoryId} | ${t.title} | ${t.estimateHours} |`),
+    '| Historia | Tarea | Horas |',
+    '|----------|-------|-------|',
+    ...tasks.map(t => `| ${t.userStoryId} | ${t.title} | ${t.estimatedHours} |`),
     '',
     '## Priorización',
-    ...prioritization.map(p => `- **${p.itemId}** (${p.score}/5): ${p.reason}`),
+    ...prioritization.map(p => `- **${p.userStoryId}** (${p.score}/5): ${p.justification}`),
     '',
     '## Plan del sprint',
-    ...sprintPlan.days.map(d => `- **Día ${d.day}:** ${d.activities.join('; ')}`)
+    ...sprintPlan.map(d => `- **Día ${d.day}** (${d.suggestedOwner || 'sin asignar'}): ${d.activities.join('; ')}`)
   ];
   return lines.join('\n');
 };
@@ -51,97 +52,106 @@ const buildLocalFallback = ({
   observacionesList,
   participantesList,
   tareasGuion,
-  sprintDurationDays
+  sprintDurationDays,
+  teamSize
 }) => {
   const days = sprintDurationDays || 14;
-  const owners = participantesList.slice(0, 8);
+  const owners = participantesList.slice(0, Math.max(1, teamSize || 4));
 
-  const userStories = (hallazgosList.length > 0 ? hallazgosList : [{ id: 0, recomendacion_mejora: 'Mejorar la usabilidad general del módulo evaluado.', prioridad: 'media' }])
-    .slice(0, 8)
-    .map((h, i) => {
-      const id = `US-${String(i + 1).padStart(2, '0')}`;
-      const priority = priorityFromHallazgo(h);
-      const rec = h.recomendacion_mejora || 'una interfaz más clara y eficiente';
-      return {
-        id,
-        title: `Mejora de usabilidad: hallazgo ${h.id || i + 1}`,
-        description: `Como usuario, quiero ${rec.substring(0, 200)} para completar mis tareas con menos errores.`,
-        priority,
-        acceptanceCriteria: [
-          'La mejora está implementada en el módulo evaluado.',
-          'En re-test, los participantes reducen errores respecto a la línea base.',
-          'El equipo documenta el cambio en el dashboard de hallazgos.'
-        ].slice(0, 3)
-      };
-    });
-
-  const obs = observacionesList[0];
-  if (obs && obs.mejora_propuesta && userStories.length < 8) {
-    userStories.push({
-      id: `US-${String(userStories.length + 1).padStart(2, '0')}`,
-      title: 'Aplicar mejora desde observación de prueba',
-      description: `Como usuario, quiero que se aplique: ${obs.mejora_propuesta.substring(0, 180)}`,
-      priority: 4,
-      acceptanceCriteria: [
-        'La mejora propuesta en observaciones está reflejada en la UI.',
-        obs.criterio_exito ? `Se cumple el criterio de la tarea asociada.` : 'Se valida con al menos una sesión de prueba.'
-      ]
-    });
+  if (hallazgosList.length === 0 && observacionesList.length === 0) {
+    return {
+      userStories: [],
+      tasks: [],
+      prioritization: [],
+      sprintPlan: [],
+      markdown: '# Borrador Sprint Backlog\n\nNo hay hallazgos ni observaciones en el flujo seleccionado para generar historias.'
+    };
   }
+
+  const userStories = hallazgosList.slice(0, 8).map((h, i) => {
+    const id = `US-${i + 1}`;
+    const rec = (h.recomendacion_mejora || '').substring(0, 200);
+    return {
+      id,
+      title: `Resolver hallazgo #${h.id}`,
+      description: `Como usuario del sistema, quiero ${rec || 'mejorar la interfaz del módulo evaluado'} para reducir errores y completar las tareas del guion.`,
+      priority: priorityFromHallazgo(h),
+      acceptanceCriteria: [
+        `Se aborda la recomendación del hallazgo #${h.id}.`,
+        'En re-test se reduce la cantidad de errores respecto a la línea base.',
+        h.frecuencia ? `El problema reportado (${h.frecuencia}) deja de reproducirse en condiciones normales.` : 'El equipo valida el cambio con una sesión de prueba.'
+      ].filter(Boolean).slice(0, 3)
+    };
+  });
+
+  observacionesList
+    .filter(o => !o.exito && o.mejora_propuesta)
+    .slice(0, Math.max(0, 8 - userStories.length))
+    .forEach((obs, idx) => {
+      const id = `US-${userStories.length + 1}`;
+      userStories.push({
+        id,
+        title: `Mejora desde observación #${obs.id}`,
+        description: `Como participante de la prueba, quiero ${obs.mejora_propuesta.substring(0, 180)} para completar la tarea ${obs.tarea_id} sin fricción.`,
+        priority: obs.cantidad_errores >= 3 ? 2 : 3,
+        acceptanceCriteria: [
+          obs.problema_detectado ? `Se corrige: ${obs.problema_detectado.substring(0, 120)}` : 'La mejora propuesta queda implementada.',
+          'La observación queda registrada como resuelta en validación.'
+        ]
+      });
+    });
 
   const tasks = [];
   userStories.forEach((us, i) => {
     tasks.push({
-      id: `TK-${String(tasks.length + 1).padStart(2, '0')}`,
-      title: `Análisis UX y wireframes para ${us.id}`,
-      linkedStoryId: us.id,
-      estimateHours: 4,
-      techNotes: 'Documentar flujo actual vs propuesto; alinear con escenarios del guion de prueba.'
+      userStoryId: us.id,
+      title: `Diseño UX / wireframes (${us.id})`,
+      estimatedHours: 4,
+      technicalNotes: 'Basado en escenarios del guion y observaciones vinculadas.'
     });
     tasks.push({
-      id: `TK-${String(tasks.length + 1).padStart(2, '0')}`,
-      title: `Implementación frontend para ${us.id}`,
-      linkedStoryId: us.id,
-      estimateHours: 6,
-      techNotes: 'Componentes React/Next; reutilizar design system del proyecto.'
+      userStoryId: us.id,
+      title: `Implementación frontend (${us.id})`,
+      estimatedHours: 6,
+      technicalNotes: 'React/Next; alinear con módulo evaluado en el plan de prueba.'
     });
     if (i % 2 === 0) {
       tasks.push({
-        id: `TK-${String(tasks.length + 1).padStart(2, '0')}`,
-        title: `Pruebas de usabilidad de validación (${us.id})`,
-        linkedStoryId: us.id,
-        estimateHours: 3,
-        techNotes: 'Registrar observaciones en API; comparar tiempo y errores vs baseline.'
+        userStoryId: us.id,
+        title: `Validación de usabilidad (${us.id})`,
+        estimatedHours: 3,
+        technicalNotes: 'Re-ejecutar escenario del guion; registrar observaciones en el dashboard.'
       });
     }
   });
 
   const prioritization = userStories.map(us => ({
-    itemId: us.id,
+    userStoryId: us.id,
     score: us.priority,
-    reason: `Derivado de hallazgos/observaciones del dashboard; prioridad ${us.priority}/5.`
+    justification: `Prioridad ${us.priority}/5 derivada de severidad/frecuencia en hallazgos u observaciones del flujo.`
   }));
 
   const tareaRef = tareasGuion.find(t => t.criterio_exito) || tareasGuion[0];
-  const sprintDays = [];
-  const chunk = Math.max(1, Math.ceil(days / Math.min(userStories.length, 5)));
+  const sprintPlan = [];
+  const chunk = Math.max(1, Math.ceil(days / Math.max(userStories.length, 1)));
+
   for (let d = 1; d <= days; d += 1) {
     const storyIdx = Math.min(userStories.length - 1, Math.floor((d - 1) / chunk));
     const us = userStories[storyIdx];
-    const activities = d === 1
-      ? [`Sprint planning — ${planDePrueba.producto}`, 'Revisión de métricas del dashboard']
-      : d === days
-        ? ['Sprint review y retrospectiva', `Validar criterio: ${tareaRef?.criterio_exito || 'cierre de historias'}`]
-        : [`Avance en ${us?.id || 'historias'}`, 'Daily y actualización de hallazgos'];
-    sprintDays.push({ day: d, activities });
+    const owner = owners[(d - 1) % owners.length];
+    const ownerLabel = owner ? `${owner.nombre} (${owner.perfil || 'participante'})` : '';
+
+    let activities;
+    if (d === 1) {
+      activities = [`Sprint planning — ${planDePrueba.producto}`, 'Revisión de métricas del flujo'];
+    } else if (d === days) {
+      activities = ['Sprint review y retrospectiva', `Validar: ${tareaRef?.criterio_exito || 'cierre de historias'}`];
+    } else {
+      activities = [`Avance en ${us?.id || 'backlog'}`, 'Daily standup'];
+    }
+
+    sprintPlan.push({ day: d, activities, suggestedOwner: ownerLabel });
   }
-
-  const suggestedOwners = userStories.map((us, i) => ({
-    storyId: us.id,
-    participantId: String(owners[i % owners.length]?.id || '1')
-  }));
-
-  const sprintPlan = { days: sprintDays, suggestedOwners };
 
   const markdown = buildMarkdown({
     planDePrueba,

@@ -6,11 +6,13 @@ const {
   getPruebas,
   getPruebaById,
   updatePrueba,
-  deletePrueba
+  deletePrueba,
+  getPruebaSummary
 } = require('../controllers/pruebasController');
 
 router.post('/', asyncHandler(createPrueba));
 router.get('/', asyncHandler(getPruebas));
+router.get('/:id/summary', asyncHandler(getPruebaSummary));
 router.get('/:id', asyncHandler(getPruebaById));
 router.put('/:id', asyncHandler(updatePrueba));
 router.delete('/:id', asyncHandler(deletePrueba));

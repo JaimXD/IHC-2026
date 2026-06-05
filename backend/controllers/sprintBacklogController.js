@@ -53,12 +53,37 @@ exports.generateSprintBacklog = async (req, res, next) => {
       });
     });
 
-    const pruebasRow = (await queryAsync('SELECT id, producto, modulo_evaluado, objetivo FROM pruebas_usabilidad ORDER BY id DESC LIMIT 1'))[0] || { producto: 'Producto Desconocido', modulo_evaluado: null, objetivo: null };
+    const pruebaId = req.body && req.body.pruebaId;
+    if (!pruebaId) {
+      const error = new Error('Se requiere un identificador del plan de prueba (pruebaId)');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const pruebasRow = (await queryAsync('SELECT id, producto, modulo_evaluado, objetivo FROM pruebas_usabilidad WHERE id = ?', [pruebaId]))[0];
+    if (!pruebasRow) {
+      const error = new Error('Prueba de usabilidad no encontrada');
+      error.statusCode = 404;
+      throw error;
+    }
+
     const totalPruebasRow = (await queryAsync('SELECT COUNT(*) AS total_pruebas FROM pruebas_usabilidad'))[0] || { total_pruebas: 0 };
-    const hallazgos = await queryAsync('SELECT id, prueba_id, frecuencia, severidad, prioridad, estado, recomendacion_mejora FROM hallazgos');
-    const tareas = await queryAsync('SELECT id, prueba_id, escenario, resultado_esperado, metrica_principal, criterio_exito FROM tareas');
-    const observaciones = await queryAsync('SELECT id, participante_id, tarea_id, exito, tiempo_segundos, cantidad_errores, comentarios, problema_detectado, severidad, mejora_propuesta FROM observaciones');
-    const participantes = await queryAsync('SELECT id, nombre, perfil FROM participantes');
+    
+    const hallazgos = await queryAsync('SELECT id, prueba_id, frecuencia, severidad, prioridad, estado, recomendacion_mejora FROM hallazgos WHERE prueba_id = ?', [pruebaId]);
+    const tareas = await queryAsync('SELECT id, prueba_id, escenario, resultado_esperado, metrica_principal, criterio_exito FROM tareas WHERE prueba_id = ?', [pruebaId]);
+    
+    const tareaIdsArr = tareas.map(t => t.id);
+    let observaciones = [];
+    if (tareaIdsArr.length > 0) {
+        observaciones = await queryAsync('SELECT id, participante_id, tarea_id, exito, tiempo_segundos, cantidad_errores, comentarios, problema_detectado, severidad, mejora_propuesta FROM observaciones WHERE tarea_id IN (?)', [tareaIdsArr]);
+    }
+    
+    let participantes = [];
+    const participanteIds = [...new Set(observaciones.map(o => o.participante_id))];
+    if (participanteIds.length > 0) {
+        participantes = await queryAsync('SELECT id, nombre, perfil FROM participantes WHERE id IN (?)', [participanteIds]);
+    }
+
     let historical = [];
     try {
       historical = await queryAsync('SELECT id, title, status, created_at, json_payload FROM sprint_backlogs ORDER BY created_at DESC LIMIT 5');
@@ -75,6 +100,12 @@ exports.generateSprintBacklog = async (req, res, next) => {
       erroresTotales = observaciones.reduce((s, o) => s + (Number(o.cantidad_errores) || 0), 0);
     }
 
+    let tiempoPromedioSeg = null;
+    if (observaciones.length > 0) {
+      const totalTiempo = observaciones.reduce((s, o) => s + (Number(o.tiempo_segundos) || 0), 0);
+      tiempoPromedioSeg = Math.round(totalTiempo / observaciones.length);
+    }
+
     const hallazgosPorPrioridad = hallazgos.reduce((acc, h) => {
       const key = h.prioridad || 'Sin prioridad';
       acc[key] = (acc[key] || 0) + 1;
@@ -85,11 +116,12 @@ exports.generateSprintBacklog = async (req, res, next) => {
       totalPruebas,
       tasaExitoProm,
       erroresTotales,
+      tiempoPromedioSeg,
       hallazgosPorPrioridad
     };
 
     const planDePrueba = {
-      id: pruebasRow.id || null,
+      id: pruebasRow.id,
       producto: pruebasRow.producto || 'Producto Desconocido',
       modulo_evaluado: pruebasRow.modulo_evaluado || null,
       objetivo: pruebasRow.objetivo || null
@@ -115,22 +147,36 @@ exports.generateSprintBacklog = async (req, res, next) => {
 
     const sprintDurationDays = (req.body && req.body.context && req.body.context.sprintDurationDays) || 14;
     const teamSize = (req.body && req.body.context && req.body.context.teamSize) || participantesList.length || 4;
-    const payload = {
-      context: {
-        product: planDePrueba.producto,
-        modulo: planDePrueba.modulo_evaluado,
-        objetivo: planDePrueba.objetivo,
-        sprintDurationDays,
-        teamSize
-      }
-    };
-    if (sources.includes('dashboard')) payload.dashboard = dashboard;
-    if (sources.includes('planDePrueba')) payload.planDePrueba = planDePrueba;
-    if (sources.includes('tareasGuion')) payload.tareasGuion = tareasGuion;
-    if (sources.includes('participantes')) payload.participantes = participantesList;
-    if (sources.includes('observaciones')) payload.observaciones = observacionesList;
-    if (sources.includes('hallazgos')) payload.hallazgos = hallazgosList;
-    if (sources.includes('historicalBacklogs')) payload.historicalBacklogs = historicalBacklogs;
+
+    const contextJSON = {};
+    if (sources.includes('planDePrueba') && planDePrueba.producto) {
+      contextJSON.planDePrueba = planDePrueba;
+    }
+    if (sources.includes('tareasGuion') && tareasGuion.length > 0) {
+      contextJSON.tareasGuion = tareasGuion;
+    }
+    if (sources.includes('participantes') && participantesList.length > 0) {
+      contextJSON.participantes = participantesList;
+    }
+    if (sources.includes('observaciones') && observacionesList.length > 0) {
+      contextJSON.observaciones = observacionesList;
+    }
+    if (sources.includes('hallazgos') && hallazgosList.length > 0) {
+      contextJSON.hallazgos = hallazgosList;
+    }
+    if (sources.includes('dashboard')) {
+      contextJSON.metricasAgregadas = {
+        tasaExitoGlobal: tasaExitoProm,
+        totalErrores: erroresTotales,
+        tiempoPromedioSegundos: tiempoPromedioSeg,
+        hallazgosPorPrioridad
+      };
+    }
+    if (sources.includes('historicalBacklogs') && historicalBacklogs.length > 0) {
+      contextJSON.backlogsHistoricos = historicalBacklogs;
+    }
+
+    const aiPayload = { sprintDurationDays, teamSize, contextJSON };
 
     const fallbackPayload = {
       planDePrueba,
@@ -139,11 +185,12 @@ exports.generateSprintBacklog = async (req, res, next) => {
       observacionesList,
       participantesList,
       tareasGuion,
-      sprintDurationDays
+      sprintDurationDays,
+      teamSize
     };
 
     try {
-      const datos = await aiClient.generateWithPayload(payload, { model: 'gemini-2.5-flash' });
+      const datos = await aiClient.generateWithPayload(aiPayload, { model: 'gemini-2.5-flash' });
       res.json({
         success: true,
         data: datos,

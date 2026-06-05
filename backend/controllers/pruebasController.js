@@ -76,10 +76,38 @@ const deletePrueba = (req, res, next) => {
 	});
 };
 
+const getPruebaSummary = (req, res, next) => {
+	const { id } = req.params;
+
+	const queryAsync = (sql, params = []) => new Promise((resolve, reject) => {
+		db.query(sql, params, (err, results) => {
+			if (err) return reject(err);
+			resolve(results);
+		});
+	});
+
+	Promise.all([
+		queryAsync('SELECT COUNT(*) as count FROM tareas WHERE prueba_id = ?', [id]),
+		queryAsync('SELECT COUNT(*) as count FROM hallazgos WHERE prueba_id = ?', [id]),
+		queryAsync('SELECT COUNT(*) as count FROM observaciones o JOIN tareas t ON o.tarea_id = t.id WHERE t.prueba_id = ?', [id]),
+		queryAsync('SELECT COUNT(DISTINCT o.participante_id) as count FROM observaciones o JOIN tareas t ON o.tarea_id = t.id WHERE t.prueba_id = ?', [id])
+	]).then(([tareasRes, hallazgosRes, observacionesRes, participantesRes]) => {
+		res.json({
+			tareasCount: tareasRes[0].count,
+			hallazgosCount: hallazgosRes[0].count,
+			observacionesCount: observacionesRes[0].count,
+			participantesCount: participantesRes[0].count
+		});
+	}).catch(err => {
+		next(err);
+	});
+};
+
 module.exports = {
 	createPrueba,
 	getPruebas,
 	getPruebaById,
 	updatePrueba,
-	deletePrueba
+	deletePrueba,
+	getPruebaSummary
 };

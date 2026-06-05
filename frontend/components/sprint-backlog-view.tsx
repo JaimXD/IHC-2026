@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useMemo, useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -29,35 +29,39 @@ interface UserStory {
 }
 
 interface TechnicalTask {
-  id: string
+  userStoryId: string
   title: string
-  linkedStoryId: string
-  estimateHours: number
-  techNotes?: string
+  estimatedHours: number
+  technicalNotes?: string
 }
 
 interface PrioritizationItem {
-  itemId: string
+  userStoryId: string
   score: number
-  reason: string
+  justification: string
+}
+
+interface SprintPlanDay {
+  day: number
+  activities: string[]
+  suggestedOwner?: string
 }
 
 interface SprintBacklogData {
   userStories: UserStory[]
   tasks: TechnicalTask[]
   prioritization: PrioritizationItem[]
-  sprintPlan: {
-    days: { day: number; activities: string[] }[]
-    suggestedOwners: { storyId: string; participantId: string }[]
-  }
+  sprintPlan: SprintPlanDay[]
   markdown: string
 }
 
+/** Prioridad 1 = más alta, 5 = más baja */
 const priorityLabel = (p: number) => {
-  if (p >= 5) return { text: "Crítica", className: "bg-red-100 text-red-700" }
-  if (p >= 4) return { text: "Alta", className: "bg-orange-100 text-orange-700" }
-  if (p >= 3) return { text: "Media", className: "bg-amber-100 text-amber-700" }
-  return { text: "Baja", className: "bg-green-100 text-green-700" }
+  if (p <= 1) return { text: "Crítica", className: "bg-red-100 text-red-700" }
+  if (p <= 2) return { text: "Alta", className: "bg-orange-100 text-orange-700" }
+  if (p <= 3) return { text: "Media", className: "bg-amber-100 text-amber-700" }
+  if (p <= 4) return { text: "Baja", className: "bg-green-100 text-green-700" }
+  return { text: "Muy baja", className: "bg-slate-100 text-slate-600" }
 }
 
 export function SprintBacklogView() {
@@ -65,10 +69,54 @@ export function SprintBacklogView() {
   const [data, setData] = useState<SprintBacklogData | null>(null)
   const [expandedStories, setExpandedStories] = useState<Set<string>>(new Set())
 
+  const [pruebas, setPruebas] = useState<any[]>([])
+  const [selectedPruebaId, setSelectedPruebaId] = useState<string>("")
+  const [summary, setSummary] = useState<any>(null)
+  const [isLoadingSummary, setIsLoadingSummary] = useState(false)
+
+  useEffect(() => {
+    const fetchPruebas = async () => {
+      try {
+        const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"
+        const res = await fetch(`${baseUrl}/api/pruebas`)
+        if (res.ok) {
+          const fetchedData = await res.json()
+          setPruebas(fetchedData)
+        }
+      } catch (err) {
+        console.error("Error fetching pruebas", err)
+      }
+    }
+    fetchPruebas()
+  }, [])
+
+  useEffect(() => {
+    if (!selectedPruebaId) {
+      setSummary(null)
+      return
+    }
+    const fetchSummary = async () => {
+      setIsLoadingSummary(true)
+      try {
+        const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"
+        const res = await fetch(`${baseUrl}/api/pruebas/${selectedPruebaId}/summary`)
+        if (res.ok) {
+          const fetchedData = await res.json()
+          setSummary(fetchedData)
+        }
+      } catch (err) {
+        console.error("Error fetching summary", err)
+      } finally {
+        setIsLoadingSummary(false)
+      }
+    }
+    fetchSummary()
+  }, [selectedPruebaId])
+
   const kpis = useMemo(() => {
     if (!data) return null
-    const totalHours = data.tasks.reduce((s, t) => s + (t.estimateHours || 0), 0)
-    const sprintDays = data.sprintPlan?.days?.length || 0
+    const totalHours = data.tasks.reduce((s, t) => s + (t.estimatedHours || 0), 0)
+    const sprintDays = data.sprintPlan?.length || 0
     return {
       historias: data.userStories.length,
       tareas: data.tasks.length,
@@ -95,7 +143,7 @@ export function SprintBacklogView() {
       const res = await fetch(`${baseUrl}/api/sprint-backlog/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ pruebaId: selectedPruebaId }),
       })
 
       if (!res.ok) throw new Error("Error al comunicarse con la IA del servidor")
@@ -136,9 +184,17 @@ export function SprintBacklogView() {
     toast.success("Archivo Markdown exportado")
   }
 
-  const ownerMap = useMemo(() => {
+  const ownerByStory = useMemo(() => {
     const map = new Map<string, string>()
-    data?.sprintPlan?.suggestedOwners?.forEach((o) => map.set(o.storyId, o.participantId))
+    if (!data?.sprintPlan) return map
+    data.sprintPlan.forEach((day) => {
+      if (!day.suggestedOwner) return
+      data.userStories.forEach((us) => {
+        if (day.activities.some((a) => a.includes(us.id)) && !map.has(us.id)) {
+          map.set(us.id, day.suggestedOwner!)
+        }
+      })
+    })
     return map
   }, [data])
 
@@ -181,14 +237,63 @@ export function SprintBacklogView() {
               Asistente de planificación ágil
             </CardTitle>
             <CardDescription>
-              Analiza el Usability Test Dashboard y genera hasta 8 historias de usuario, tareas técnicas y plan por días.
+              Selecciona un Plan de Prueba para generar hasta 8 historias de usuario, tareas técnicas y plan por días.
             </CardDescription>
           </CardHeader>
-          <CardContent className="flex flex-col items-center py-10">
+          <CardContent className="flex flex-col items-center py-6">
+            <div className="w-full max-w-md mb-8 space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-700">Plan de Prueba (Flujo)</label>
+                <select
+                  value={selectedPruebaId}
+                  onChange={(e) => setSelectedPruebaId(e.target.value)}
+                  className="flex h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="">Selecciona un plan de prueba...</option>
+                  {pruebas.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.producto} {p.modulo_evaluado ? `- ${p.modulo_evaluado}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              
+              {isLoadingSummary && (
+                <div className="flex justify-center p-4">
+                  <Loader2 className="w-6 h-6 text-indigo-500 animate-spin" />
+                </div>
+              )}
+              
+              {summary && !isLoadingSummary && (
+                <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
+                  <h4 className="text-sm font-medium text-slate-800 mb-3 border-b pb-2">Resumen del Flujo</h4>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="text-slate-500 block">Tareas</span>
+                      <span className="font-semibold">{summary.tareasCount}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 block">Participantes</span>
+                      <span className="font-semibold">{summary.participantesCount}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 block">Observaciones</span>
+                      <span className="font-semibold">{summary.observacionesCount}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 block">Hallazgos</span>
+                      <span className="font-semibold">{summary.hallazgosCount}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
             <Button
               size="lg"
               onClick={handleGenerate}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white gap-2 rounded-full px-8"
+              disabled={!selectedPruebaId || isLoadingSummary}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white gap-2 rounded-full px-8 disabled:opacity-50"
             >
               <Sparkles className="w-4 h-4" />
               Generar Sprint Backlog
@@ -258,7 +363,7 @@ export function SprintBacklogView() {
               {data.userStories.map((us) => {
                 const pr = priorityLabel(us.priority)
                 const expanded = expandedStories.has(us.id)
-                const owner = ownerMap.get(us.id)
+                const owner = ownerByStory.get(us.id)
                 return (
                   <div key={us.id} className="border rounded-lg p-4 bg-slate-50/50">
                     <div className="flex flex-wrap items-start justify-between gap-2">
@@ -271,7 +376,7 @@ export function SprintBacklogView() {
                           {owner && (
                             <span className="text-xs text-muted-foreground flex items-center gap-1">
                               <Users className="w-3 h-3" />
-                              Participante #{owner}
+                              {owner}
                             </span>
                           )}
                         </div>
@@ -306,7 +411,6 @@ export function SprintBacklogView() {
               <table className="w-full text-sm">
                 <thead className="bg-slate-50 border-b text-xs uppercase text-slate-500">
                   <tr>
-                    <th className="px-4 py-3 text-left">ID</th>
                     <th className="px-4 py-3 text-left">Historia</th>
                     <th className="px-4 py-3 text-left">Tarea</th>
                     <th className="px-4 py-3 text-left">Horas</th>
@@ -314,13 +418,12 @@ export function SprintBacklogView() {
                   </tr>
                 </thead>
                 <tbody className="divide-y">
-                  {data.tasks.map((t) => (
-                    <tr key={t.id} className="hover:bg-slate-50/50">
-                      <td className="px-4 py-3 font-mono">{t.id}</td>
-                      <td className="px-4 py-3">{t.linkedStoryId}</td>
+                  {data.tasks.map((t, i) => (
+                    <tr key={`${t.userStoryId}-${i}`} className="hover:bg-slate-50/50">
+                      <td className="px-4 py-3 font-mono">{t.userStoryId}</td>
                       <td className="px-4 py-3 font-medium">{t.title}</td>
-                      <td className="px-4 py-3">{t.estimateHours}h</td>
-                      <td className="px-4 py-3 text-slate-600 max-w-xs">{t.techNotes || "—"}</td>
+                      <td className="px-4 py-3">{t.estimatedHours}h</td>
+                      <td className="px-4 py-3 text-slate-600 max-w-xs">{t.technicalNotes || "—"}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -335,12 +438,12 @@ export function SprintBacklogView() {
               </CardHeader>
               <CardContent className="space-y-3">
                 {[...data.prioritization]
-                  .sort((a, b) => b.score - a.score)
+                  .sort((a, b) => a.score - b.score)
                   .map((p) => (
-                    <div key={p.itemId} className="text-sm border-l-4 border-indigo-400 pl-3">
-                      <span className="font-mono font-semibold">{p.itemId}</span>
+                    <div key={p.userStoryId} className="text-sm border-l-4 border-indigo-400 pl-3">
+                      <span className="font-mono font-semibold">{p.userStoryId}</span>
                       <span className="ml-2 text-indigo-600 font-medium">{p.score}/5</span>
-                      <p className="text-slate-600 mt-0.5">{p.reason}</p>
+                      <p className="text-slate-600 mt-0.5">{p.justification}</p>
                     </div>
                   ))}
               </CardContent>
@@ -351,9 +454,12 @@ export function SprintBacklogView() {
                 <CardTitle>Plan del sprint (resumen)</CardTitle>
               </CardHeader>
               <CardContent className="max-h-80 overflow-y-auto space-y-2 text-sm">
-                {data.sprintPlan.days.slice(0, 7).map((d) => (
+                {data.sprintPlan.slice(0, 7).map((d) => (
                   <div key={d.day}>
-                    <span className="font-semibold text-indigo-700">Día {d.day}</span>
+                    <span className="font-semibold text-indigo-700">
+                      Día {d.day}
+                      {d.suggestedOwner ? ` · ${d.suggestedOwner}` : ""}
+                    </span>
                     <ul className="list-disc list-inside text-slate-600 ml-1">
                       {d.activities.map((a, i) => (
                         <li key={i}>{a}</li>
@@ -361,9 +467,9 @@ export function SprintBacklogView() {
                     </ul>
                   </div>
                 ))}
-                {data.sprintPlan.days.length > 7 && (
+                {data.sprintPlan.length > 7 && (
                   <p className="text-muted-foreground text-xs">
-                    +{data.sprintPlan.days.length - 7} días más (ver exportación MD)
+                    +{data.sprintPlan.length - 7} días más (ver exportación MD)
                   </p>
                 )}
               </CardContent>
