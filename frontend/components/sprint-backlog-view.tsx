@@ -17,6 +17,10 @@ import {
   ListChecks,
   ChevronDown,
   ChevronUp,
+  Edit2,
+  Save,
+  Trash2,
+  Plus,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -64,10 +68,101 @@ const priorityLabel = (p: number) => {
   return { text: "Muy baja", className: "bg-slate-100 text-slate-600" }
 }
 
+
+function generateMarkdownFromData(data: SprintBacklogData): string {
+  let md = '# Sprint Backlog\n\n'
+  
+  md += '## Historias de Usuario\n\n'
+  data.userStories.forEach(us => {
+    md += `### ${us.id}: ${us.title} (Prioridad: ${us.priority})\n`
+    md += `${us.description}\n\n**Criterios de Aceptación:**\n`
+    us.acceptanceCriteria.forEach(c => {
+      if (c.trim()) md += `- ${c}\n`
+    })
+    md += '\n'
+  })
+  
+  md += '## Tareas Técnicas\n\n'
+  md += '| Historia | Tarea | Horas | Notas |\n|---|---|---|---|\n'
+  data.tasks.forEach(t => {
+    md += `| ${t.userStoryId} | ${t.title} | ${t.estimatedHours}h | ${t.technicalNotes || '-'} |\n`
+  })
+  md += '\n'
+  
+  md += '## Priorización\n\n'
+  data.prioritization.forEach(p => {
+    md += `- **${p.userStoryId}** (Score: ${p.score}/5): ${p.justification}\n`
+  })
+  md += '\n'
+  
+  md += '## Plan del Sprint\n\n'
+  data.sprintPlan.forEach(d => {
+    md += `### Día ${d.day} ${d.suggestedOwner ? `(${d.suggestedOwner})` : ''}\n`
+    d.activities.forEach(a => {
+      if (a.trim()) md += `- ${a}\n`
+    })
+    md += '\n'
+  })
+  
+  return md
+}
+
 export function SprintBacklogView() {
   const [isGenerating, setIsGenerating] = useState(false)
   const [data, setData] = useState<SprintBacklogData | null>(null)
   const [expandedStories, setExpandedStories] = useState<Set<string>>(new Set())
+
+  const [isEditing, setIsEditing] = useState(false)
+
+  const updateStory = (id: string, field: keyof UserStory, value: any) => {
+    setData(prev => prev ? {
+      ...prev,
+      userStories: prev.userStories.map(us => us.id === id ? { ...us, [field]: value } : us)
+    } : null)
+  }
+
+  const updateTask = (index: number, field: keyof TechnicalTask, value: any) => {
+    setData(prev => {
+      if (!prev) return null
+      const newTasks = [...prev.tasks]
+      newTasks[index] = { ...newTasks[index], [field]: value }
+      return { ...prev, tasks: newTasks }
+    })
+  }
+
+  const addTask = () => {
+    setData(prev => prev ? {
+      ...prev,
+      tasks: [...prev.tasks, { userStoryId: '', title: 'Nueva Tarea', estimatedHours: 0, technicalNotes: '' }]
+    } : null)
+  }
+
+  const removeTask = (index: number) => {
+    setData(prev => {
+      if (!prev) return null
+      const newTasks = [...prev.tasks]
+      newTasks.splice(index, 1)
+      return { ...prev, tasks: newTasks }
+    })
+  }
+
+  const updatePrioritization = (id: string, field: keyof PrioritizationItem, value: any) => {
+    setData(prev => prev ? {
+      ...prev,
+      prioritization: prev.prioritization.map(p => p.userStoryId === id ? { ...p, [field]: value } : p)
+    } : null)
+  }
+
+  const updateSprintPlan = (dayIndex: number, field: keyof SprintPlanDay, value: any) => {
+    setData(prev => {
+      if (!prev) return null
+      const newPlan = [...prev.sprintPlan]
+      newPlan[dayIndex] = { ...newPlan[dayIndex], [field]: value }
+      return { ...prev, sprintPlan: newPlan }
+    })
+  }
+
+
 
   const [pruebas, setPruebas] = useState<any[]>([])
   const [selectedPruebaId, setSelectedPruebaId] = useState<string>("")
@@ -213,6 +308,10 @@ export function SprintBacklogView() {
 
         {data && (
           <div className="flex gap-2">
+            <Button variant={isEditing ? "default" : "outline"} onClick={() => setIsEditing(!isEditing)} className={`gap-2 ${isEditing ? "bg-indigo-600 hover:bg-indigo-700" : ""}`}>
+              {isEditing ? <Save className="w-4 h-4" /> : <Edit2 className="w-4 h-4" />}
+              {isEditing ? "Guardar Cambios" : "Modo Edición"}
+            </Button>
             <Button variant="outline" onClick={handleExportMD} className="gap-2">
               <FileText className="w-4 h-4" />
               Exportar MD
@@ -370,9 +469,19 @@ export function SprintBacklogView() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap mb-1">
                           <span className="font-mono text-sm font-semibold">{us.id}</span>
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${pr.className}`}>
-                            {pr.text} ({us.priority}/5)
-                          </span>
+                          {isEditing ? (
+                            <select
+                              className="border rounded text-xs px-1"
+                              value={us.priority}
+                              onChange={e => updateStory(us.id, 'priority', parseInt(e.target.value))}
+                            >
+                              {[1, 2, 3, 4, 5].map(n => <option key={n} value={n}>{n}</option>)}
+                            </select>
+                          ) : (
+                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${pr.className}`}>
+                              {pr.text} ({us.priority}/5)
+                            </span>
+                          )}
                           {owner && (
                             <span className="text-xs text-muted-foreground flex items-center gap-1">
                               <Users className="w-3 h-3" />
@@ -380,22 +489,51 @@ export function SprintBacklogView() {
                             </span>
                           )}
                         </div>
-                        <h3 className="font-semibold text-slate-800">{us.title}</h3>
-                        <p className="text-sm text-slate-600 mt-1">{us.description}</p>
+                        {isEditing ? (
+                          <div className="space-y-2 mt-2 w-full">
+                            <input
+                              className="w-full border rounded px-2 py-1 font-semibold text-slate-800"
+                              value={us.title}
+                              onChange={e => updateStory(us.id, 'title', e.target.value)}
+                            />
+                            <textarea
+                              className="w-full border rounded px-2 py-1 text-sm text-slate-600"
+                              rows={2}
+                              value={us.description}
+                              onChange={e => updateStory(us.id, 'description', e.target.value)}
+                            />
+                          </div>
+                        ) : (
+                          <>
+                            <h3 className="font-semibold text-slate-800">{us.title}</h3>
+                            <p className="text-sm text-slate-600 mt-1">{us.description}</p>
+                          </>
+                        )}
                       </div>
                       <Button variant="ghost" size="sm" onClick={() => toggleStory(us.id)}>
                         {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                       </Button>
                     </div>
                     {expanded && (
-                      <ul className="mt-3 space-y-1 text-sm border-t pt-3">
-                        {us.acceptanceCriteria.map((c, i) => (
-                          <li key={i} className="flex gap-2">
-                            <span className="text-indigo-500">✓</span>
-                            {c}
-                          </li>
-                        ))}
-                      </ul>
+                      <div className="mt-3 text-sm border-t pt-3">
+                        {isEditing ? (
+                          <textarea
+                            className="w-full border rounded px-2 py-1"
+                            rows={4}
+                            value={us.acceptanceCriteria.join('\n')}
+                            onChange={e => updateStory(us.id, 'acceptanceCriteria', e.target.value.split('\n'))}
+                          />
+                        ) : (
+                          <ul className="space-y-1">
+                            {us.acceptanceCriteria.map((c, i) => (
+                              <li key={i} className="flex gap-2">
+                                <span className="text-indigo-500">✓</span>
+                                {c}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
                     )}
                   </div>
                 )
@@ -413,21 +551,44 @@ export function SprintBacklogView() {
                   <tr>
                     <th className="px-4 py-3 text-left">Historia</th>
                     <th className="px-4 py-3 text-left">Tarea</th>
-                    <th className="px-4 py-3 text-left">Horas</th>
+                    <th className="px-4 py-3 text-left w-24">Horas</th>
                     <th className="px-4 py-3 text-left">Notas</th>
+                    {isEditing && <th className="px-4 py-3 text-center w-16">Acción</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y">
                   {data.tasks.map((t, i) => (
-                    <tr key={`${t.userStoryId}-${i}`} className="hover:bg-slate-50/50">
-                      <td className="px-4 py-3 font-mono">{t.userStoryId}</td>
-                      <td className="px-4 py-3 font-medium">{t.title}</td>
-                      <td className="px-4 py-3">{t.estimatedHours}h</td>
-                      <td className="px-4 py-3 text-slate-600 max-w-xs">{t.technicalNotes || "—"}</td>
+                    <tr key={i} className="hover:bg-slate-50/50">
+                      <td className="px-4 py-3 font-mono">
+                        {isEditing ? <input className="w-20 border rounded px-1" value={t.userStoryId} onChange={e => updateTask(i, 'userStoryId', e.target.value)} /> : t.userStoryId}
+                      </td>
+                      <td className="px-4 py-3 font-medium">
+                        {isEditing ? <input className="w-full border rounded px-1" value={t.title} onChange={e => updateTask(i, 'title', e.target.value)} /> : t.title}
+                      </td>
+                      <td className="px-4 py-3">
+                        {isEditing ? <input type="number" className="w-16 border rounded px-1" value={t.estimatedHours} onChange={e => updateTask(i, 'estimatedHours', parseFloat(e.target.value))} /> : `${t.estimatedHours}h`}
+                      </td>
+                      <td className="px-4 py-3 text-slate-600 max-w-xs">
+                        {isEditing ? <input className="w-full border rounded px-1" value={t.technicalNotes || ''} onChange={e => updateTask(i, 'technicalNotes', e.target.value)} /> : (t.technicalNotes || "—")}
+                      </td>
+                      {isEditing && (
+                        <td className="px-4 py-3 text-center">
+                          <Button variant="ghost" size="sm" className="text-red-500 h-8 w-8 p-0" onClick={() => removeTask(i)}>
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
               </table>
+              {isEditing && (
+                <div className="p-3 border-t">
+                  <Button variant="outline" size="sm" onClick={addTask} className="gap-2">
+                    <Plus className="w-4 h-4" /> Agregar Tarea
+                  </Button>
+                </div>
+              )}
             </div>
           </Card>
 
@@ -442,8 +603,17 @@ export function SprintBacklogView() {
                   .map((p) => (
                     <div key={p.userStoryId} className="text-sm border-l-4 border-indigo-400 pl-3">
                       <span className="font-mono font-semibold">{p.userStoryId}</span>
-                      <span className="ml-2 text-indigo-600 font-medium">{p.score}/5</span>
-                      <p className="text-slate-600 mt-0.5">{p.justification}</p>
+                      {isEditing ? (
+                        <>
+                          <input type="number" min="1" max="5" className="ml-2 w-12 border rounded px-1" value={p.score} onChange={e => updatePrioritization(p.userStoryId, 'score', parseFloat(e.target.value))} />
+                          <textarea className="w-full border rounded px-2 py-1 mt-1 block" value={p.justification} onChange={e => updatePrioritization(p.userStoryId, 'justification', e.target.value)} />
+                        </>
+                      ) : (
+                        <>
+                          <span className="ml-2 text-indigo-600 font-medium">{p.score}/5</span>
+                          <p className="text-slate-600 mt-0.5">{p.justification}</p>
+                        </>
+                      )}
                     </div>
                   ))}
               </CardContent>
@@ -454,17 +624,25 @@ export function SprintBacklogView() {
                 <CardTitle>Plan del sprint (resumen)</CardTitle>
               </CardHeader>
               <CardContent className="max-h-80 overflow-y-auto space-y-2 text-sm">
-                {data.sprintPlan.slice(0, 7).map((d) => (
-                  <div key={d.day}>
-                    <span className="font-semibold text-indigo-700">
+                {data.sprintPlan.slice(0, 7).map((d, i) => (
+                  <div key={d.day} className="mb-4">
+                    <span className="font-semibold text-indigo-700 block mb-1">
                       Día {d.day}
-                      {d.suggestedOwner ? ` · ${d.suggestedOwner}` : ""}
+                      {isEditing ? (
+                        <input className="ml-2 border rounded px-1 font-normal text-slate-800" placeholder="Responsable" value={d.suggestedOwner || ''} onChange={e => updateSprintPlan(i, 'suggestedOwner', e.target.value)} />
+                      ) : (
+                        d.suggestedOwner ? ` · ${d.suggestedOwner}` : ""
+                      )}
                     </span>
-                    <ul className="list-disc list-inside text-slate-600 ml-1">
-                      {d.activities.map((a, i) => (
-                        <li key={i}>{a}</li>
-                      ))}
-                    </ul>
+                    {isEditing ? (
+                      <textarea className="w-full border rounded px-2 py-1 text-slate-600" rows={3} value={d.activities.join('\n')} onChange={e => updateSprintPlan(i, 'activities', e.target.value.split('\n'))} />
+                    ) : (
+                      <ul className="list-disc list-inside text-slate-600 ml-1">
+                        {d.activities.map((a, j) => (
+                          <li key={j}>{a}</li>
+                        ))}
+                      </ul>
+                    )}
                   </div>
                 ))}
                 {data.sprintPlan.length > 7 && (
