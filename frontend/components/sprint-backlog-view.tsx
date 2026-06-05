@@ -164,10 +164,52 @@ export function SprintBacklogView() {
 
 
 
+
   const [pruebas, setPruebas] = useState<any[]>([])
   const [selectedPruebaId, setSelectedPruebaId] = useState<string>("")
   const [summary, setSummary] = useState<any>(null)
   const [isLoadingSummary, setIsLoadingSummary] = useState(false)
+
+  useEffect(() => {
+    const savedData = sessionStorage.getItem("sprintBacklog_data")
+    const savedPruebaId = sessionStorage.getItem("sprintBacklog_selectedPruebaId")
+    if (savedData) {
+      try {
+        setData(JSON.parse(savedData))
+      } catch (e) {
+        console.error("Error parsing stored data", e)
+      }
+    }
+    if (savedPruebaId) {
+      setSelectedPruebaId(savedPruebaId)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (data) {
+      sessionStorage.setItem("sprintBacklog_data", JSON.stringify(data))
+    } else {
+      sessionStorage.removeItem("sprintBacklog_data")
+    }
+  }, [data])
+
+  useEffect(() => {
+    if (selectedPruebaId) {
+      sessionStorage.setItem("sprintBacklog_selectedPruebaId", selectedPruebaId)
+    } else {
+      sessionStorage.removeItem("sprintBacklog_selectedPruebaId")
+    }
+  }, [selectedPruebaId])
+
+  const handleClearSession = () => {
+    setData(null)
+    setSelectedPruebaId("")
+    setSummary(null)
+    setIsEditing(false)
+    sessionStorage.removeItem("sprintBacklog_data")
+    sessionStorage.removeItem("sprintBacklog_selectedPruebaId")
+  }
+
 
   useEffect(() => {
     const fetchPruebas = async () => {
@@ -308,6 +350,10 @@ export function SprintBacklogView() {
 
         {data && (
           <div className="flex gap-2">
+            <Button variant="outline" onClick={handleClearSession} className="text-red-500 hover:text-red-600 hover:bg-red-50 border-red-200">
+              <Trash2 className="w-4 h-4 mr-2" />
+              Nuevo
+            </Button>
             <Button variant={isEditing ? "default" : "outline"} onClick={() => setIsEditing(!isEditing)} className={`gap-2 ${isEditing ? "bg-indigo-600 hover:bg-indigo-700" : ""}`}>
               {isEditing ? <Save className="w-4 h-4" /> : <Edit2 className="w-4 h-4" />}
               {isEditing ? "Guardar Cambios" : "Modo Edición"}
@@ -625,7 +671,7 @@ export function SprintBacklogView() {
               </CardHeader>
               <CardContent className="max-h-80 overflow-y-auto space-y-2 text-sm">
                 {data.sprintPlan.slice(0, 7).map((d, i) => (
-                  <div key={d.day} className="mb-4">
+                  <div key={i} className="mb-4">
                     <span className="font-semibold text-indigo-700 block mb-1">
                       Día {d.day}
                       {isEditing ? (
