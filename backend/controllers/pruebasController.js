@@ -20,6 +20,18 @@ const createPrueba = (req, res, next) => {
 };
 
 const getPruebas = (req, res, next) => {
+	const { search } = req.query;
+
+	if (typeof search === 'string') {
+		const like = `%${search}%`;
+		const sql = 'SELECT * FROM pruebas_usabilidad WHERE producto LIKE ? OR modulo_evaluado LIKE ? ORDER BY id DESC LIMIT 50';
+		db.query(sql, [like, like], (err, results) => {
+			if (err) return next(err);
+			res.json(results);
+		});
+		return;
+	}
+
 	db.query('SELECT * FROM pruebas_usabilidad', (err, results) => {
 		if (err) return next(err);
 		res.json(results);

@@ -3,6 +3,9 @@
 import { useMemo, useState, useEffect, useReducer } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
+import { cn } from "@/lib/utils"
 import {
   Sparkles,
   FileText,
@@ -17,6 +20,8 @@ import {
   Edit2,
   Save,
   Trash2,
+  Check,
+  ChevronsUpDown,
 } from "lucide-react"
 import { toast } from "sonner"
 import { sprintBacklogReducer } from "./sprint-backlog/reducer"
@@ -34,6 +39,10 @@ export function SprintBacklogView() {
 
   const [pruebas, setPruebas] = useState<any[]>([])
   const [selectedPruebaId, setSelectedPruebaId] = useState<string>("")
+  const [selectedPrueba, setSelectedPrueba] = useState<any>(null)
+  const [pruebaSearchTerm, setPruebaSearchTerm] = useState("")
+  const [isLoadingPruebas, setIsLoadingPruebas] = useState(false)
+  const [isComboboxOpen, setIsComboboxOpen] = useState(false)
   const [summary, setSummary] = useState<any>(null)
   const [isLoadingSummary, setIsLoadingSummary] = useState(false)
 
@@ -48,7 +57,14 @@ export function SprintBacklogView() {
         console.error("Error parsing stored data", e)
       }
     }
-    if (savedPruebaId) setSelectedPruebaId(savedPruebaId)
+    if (savedPruebaId) {
+      setSelectedPruebaId(savedPruebaId)
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"
+      fetch(`${baseUrl}/api/pruebas/${savedPruebaId}`)
+        .then((res) => (res.ok ? res.json() : null))
+        .then((p) => p && setSelectedPrueba(p))
+        .catch((err) => console.error("Error fetching prueba seleccionada", err))
+    }
   }, [])
 
   useEffect(() => {
@@ -67,19 +83,23 @@ export function SprintBacklogView() {
     }
   }, [selectedPruebaId])
 
-  // ── Carga de pruebas ──────────────────────────────────────────────────────
+  // ── Carga de pruebas (búsqueda con debounce) ───────────────────────────────
   useEffect(() => {
-    const fetchPruebas = async () => {
+    setIsLoadingPruebas(true)
+    const timeoutId = setTimeout(async () => {
       try {
         const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"
-        const res = await fetch(`${baseUrl}/api/pruebas`)
+        const res = await fetch(`${baseUrl}/api/pruebas?search=${encodeURIComponent(pruebaSearchTerm)}`)
         if (res.ok) setPruebas(await res.json())
       } catch (err) {
         console.error("Error fetching pruebas", err)
+      } finally {
+        setIsLoadingPruebas(false)
       }
-    }
-    fetchPruebas()
-  }, [])
+    }, 300)
+
+    return () => clearTimeout(timeoutId)
+  }, [pruebaSearchTerm])
 
   useEffect(() => {
     if (!selectedPruebaId) {
@@ -105,6 +125,7 @@ export function SprintBacklogView() {
   const handleClearSession = () => {
     dispatch({ type: "CLEAR_DATA" })
     setSelectedPruebaId("")
+    setSelectedPrueba(null)
     setSummary(null)
     setIsEditing(false)
     sessionStorage.removeItem("sprintBacklog_data")
@@ -283,18 +304,65 @@ export function SprintBacklogView() {
             <div className="w-full max-w-md mb-8 space-y-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium text-slate-700">Plan de Prueba (Flujo)</label>
-                <select
-                  value={selectedPruebaId}
-                  onChange={(e) => setSelectedPruebaId(e.target.value)}
-                  className="flex h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-150"
-                >
-                  <option value="">Selecciona un plan de prueba...</option>
-                  {pruebas.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.producto} {p.modulo_evaluado ? `- ${p.modulo_evaluado}` : ""}
-                    </option>
-                  ))}
-                </select>
+                <Popover open={isComboboxOpen} onOpenChange={setIsComboboxOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={isComboboxOpen}
+                      className="h-10 w-full justify-between rounded-lg border-slate-200 bg-white px-3 py-2 text-sm font-normal text-slate-900 shadow-sm hover:bg-white focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:border-transparent transition-all duration-150"
+                    >
+                      <span className="block min-w-0 truncate pr-2">
+                        {selectedPrueba
+                          ? `${selectedPrueba.producto}${selectedPrueba.modulo_evaluado ? ` - ${selectedPrueba.modulo_evaluado}` : ""}`
+                          : "Selecciona un plan de prueba..."}
+                      </span>
+                      <ChevronsUpDown className="size-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                    <Command shouldFilter={false}>
+                      <CommandInput
+                        placeholder="Buscar plan de prueba..."
+                        value={pruebaSearchTerm}
+                        onValueChange={setPruebaSearchTerm}
+                      />
+                      <CommandList>
+                        {isLoadingPruebas && (
+                          <div className="flex items-center justify-center py-6">
+                            <Loader2 className="size-4 animate-spin text-indigo-500" />
+                          </div>
+                        )}
+                        {!isLoadingPruebas && pruebas.length === 0 && (
+                          <CommandEmpty>No se encontraron planes de prueba.</CommandEmpty>
+                        )}
+                        {!isLoadingPruebas &&
+                          pruebas.map((p) => (
+                            <CommandItem
+                              key={p.id}
+                              value={String(p.id)}
+                              onSelect={() => {
+                                setSelectedPruebaId(String(p.id))
+                                setSelectedPrueba(p)
+                                setIsComboboxOpen(false)
+                              }}
+                              className="min-w-0 pr-8"
+                            >
+                              <Check
+                                className={cn(
+                                  "size-4 shrink-0",
+                                  selectedPruebaId === String(p.id) ? "opacity-100" : "opacity-0",
+                                )}
+                              />
+                              <span className="block min-w-0 truncate">
+                                {p.producto} {p.modulo_evaluado ? `- ${p.modulo_evaluado}` : ""}
+                              </span>
+                            </CommandItem>
+                          ))}
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
 
               {isLoadingSummary && (
